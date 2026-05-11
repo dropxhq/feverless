@@ -1,0 +1,1191 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>烧退了 · UI Kit v1.0</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --red:    #FF3B30;
+    --orange: #FF9500;
+    --yellow: #FFCC00;
+    --green:  #34C759;
+    --teal:   #5AC8FA;
+    --blue:   #007AFF;
+    --indigo: #5856D6;
+    --pink:   #FF2D55;
+    --bg:     #F2F2F7;
+    --card:   #FFFFFF;
+    --label1: #000000;
+    --label2: #3C3C43;
+    --label3: rgba(60,60,67,0.6);
+    --label4: rgba(60,60,67,0.3);
+    --sep:    rgba(60,60,67,0.12);
+    --fill1:  rgba(120,120,128,0.2);
+    --fill2:  rgba(120,120,128,0.16);
+    --fill3:  rgba(120,120,128,0.12);
+  }
+
+  html { font-size: 16px; }
+
+  body {
+    font-family: 'Inter', -apple-system, 'SF Pro Display', 'PingFang SC', sans-serif;
+    background: #E5E5EA;
+    color: var(--label1);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Canvas ── */
+  .canvas {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 64px 40px 96px;
+    gap: 0;
+  }
+
+  .canvas-title {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(0,0,0,0.35);
+    margin-bottom: 8px;
+  }
+  .canvas-app {
+    font-size: 32px;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    margin-bottom: 6px;
+  }
+  .canvas-desc {
+    font-size: 14px;
+    color: rgba(0,0,0,0.4);
+    margin-bottom: 56px;
+  }
+
+  /* ── Row ── */
+  .row {
+    display: flex;
+    gap: 28px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 56px;
+    align-items: flex-start;
+    width: 100%;
+    max-width: 1280px;
+  }
+  .row-label {
+    width: 100%;
+    max-width: 1280px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: rgba(0,0,0,0.3);
+    margin-bottom: 20px;
+  }
+
+  /* ── Phone Shell ── */
+  .phone-col { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+  .screen-name {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: rgba(0,0,0,0.35);
+  }
+
+  .phone {
+    width: 335px;
+    background: #1C1C1E;
+    border-radius: 52px;
+    padding: 14px;
+    box-shadow:
+      0 0 0 1px rgba(255,255,255,0.08) inset,
+      0 32px 80px rgba(0,0,0,0.4),
+      0 8px 24px rgba(0,0,0,0.2);
+    position: relative;
+  }
+  .phone-inner {
+    background: var(--bg);
+    border-radius: 40px;
+    overflow: hidden;
+    position: relative;
+  }
+  /* dynamic island */
+  .dynamic-island {
+    width: 120px; height: 34px;
+    background: #1C1C1E;
+    border-radius: 20px;
+    position: absolute;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10;
+  }
+
+  /* Status bar */
+  .status-bar {
+    height: 54px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    padding: 0 24px 8px;
+    position: relative;
+    z-index: 5;
+  }
+  .status-bar .time {
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+  .status-icons {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .status-icons svg { display: block; }
+
+  /* ── Shared nav ── */
+  .nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px 12px;
+  }
+  .nav-title {
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+  .nav-btn {
+    width: 30px; height: 30px;
+    background: var(--fill2);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .nav-action {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--blue);
+    cursor: pointer;
+  }
+
+  .scroll {
+    overflow-y: auto;
+    max-height: 616px;
+    padding: 0 16px 24px;
+  }
+  .scroll::-webkit-scrollbar { display: none; }
+
+  /* ── Tab Bar ── */
+  .tab-bar {
+    display: flex;
+    background: rgba(255,255,255,0.72);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border-top: 0.5px solid var(--sep);
+    padding: 8px 0 20px;
+  }
+  .tab {
+    flex: 1;
+    display: flex; flex-direction: column;
+    align-items: center; gap: 3px;
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--label3);
+    cursor: pointer;
+  }
+  .tab.active { color: var(--blue); }
+  .tab-icon { height: 24px; display: flex; align-items: center; }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--card);
+    border-radius: 16px;
+    margin-bottom: 10px;
+    overflow: hidden;
+  }
+  .card-inner { padding: 14px 16px; }
+
+  /* ── Section Header (inside scroll) ── */
+  .section-head {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin: 20px 0 10px;
+  }
+  .section-sub {
+    font-size: 13px;
+    color: var(--label3);
+    margin-top: -6px;
+    margin-bottom: 12px;
+  }
+
+  /* ═══════════════════════════════════
+     SCREEN 1 — HOME (fever active)
+  ═══════════════════════════════════ */
+
+  .fever-hero {
+    background: linear-gradient(160deg, #1C1C1E 0%, #2C1F1F 100%);
+    border-radius: 20px;
+    padding: 20px;
+    margin-bottom: 10px;
+    position: relative;
+    overflow: hidden;
+  }
+  .fever-hero::before {
+    content: '';
+    position: absolute;
+    top: -40px; right: -40px;
+    width: 180px; height: 180px;
+    background: radial-gradient(circle, rgba(255,59,48,0.25) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .fh-eyebrow {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.45);
+    margin-bottom: 10px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .fh-pulse {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--red);
+    animation: pulse 1.6s ease infinite;
+  }
+  @keyframes pulse {
+    0%,100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.7); }
+  }
+  .fh-temp-row {
+    display: flex; align-items: baseline;
+    gap: 4px; margin-bottom: 6px;
+  }
+  .fh-temp { font-size: 60px; font-weight: 300; color: #fff; line-height: 1; letter-spacing: -0.04em; }
+  .fh-unit { font-size: 22px; font-weight: 300; color: rgba(255,255,255,0.6); }
+  .fh-badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    background: rgba(255,59,48,0.2);
+    border: 1px solid rgba(255,59,48,0.3);
+    border-radius: 8px;
+    padding: 4px 10px;
+    font-size: 12px; font-weight: 600; color: #FF6B6B;
+    margin-bottom: 16px;
+  }
+  .fh-stats {
+    display: grid; grid-template-columns: 1fr 1fr 1fr;
+    gap: 1px;
+    background: rgba(255,255,255,0.07);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .fh-stat {
+    background: rgba(255,255,255,0.04);
+    padding: 10px 8px;
+    text-align: center;
+  }
+  .fh-stat-val { font-size: 17px; font-weight: 600; color: #fff; }
+  .fh-stat-lbl { font-size: 10px; color: rgba(255,255,255,0.4); margin-top: 2px; }
+
+  /* Quick actions */
+  .quick-row { display: flex; gap: 10px; margin-bottom: 10px; }
+  .quick-btn {
+    flex: 1; padding: 14px 10px;
+    border-radius: 14px;
+    display: flex; flex-direction: column;
+    align-items: center; gap: 6px;
+    border: none; cursor: pointer; font-family: inherit;
+  }
+  .quick-btn.red { background: var(--red); }
+  .quick-btn.blue { background: var(--blue); }
+  .quick-btn-icon { font-size: 20px; }
+  .quick-btn-label { font-size: 12px; font-weight: 600; color: #fff; }
+
+  /* Medicine card */
+  .med-header-row {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 12px;
+  }
+  .med-h-title { font-size: 13px; font-weight: 600; color: var(--label2); }
+  .pill-badge {
+    font-size: 11px; font-weight: 600;
+    padding: 3px 10px; border-radius: 20px;
+  }
+  .pill-badge.blue { background: rgba(0,122,255,0.1); color: var(--blue); }
+  .pill-badge.green { background: rgba(52,199,89,0.12); color: var(--green); }
+  .pill-badge.orange { background: rgba(255,149,0,0.12); color: var(--orange); }
+
+  .med-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 0;
+    border-bottom: 0.5px solid var(--sep);
+  }
+  .med-item:last-child { border-bottom: none; padding-bottom: 0; }
+  .med-dot {
+    width: 36px; height: 36px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 17px; flex-shrink: 0;
+  }
+  .med-dot.yellow { background: rgba(255,204,0,0.15); }
+  .med-dot.blue   { background: rgba(0,122,255,0.1); }
+  .med-info { flex: 1; min-width: 0; }
+  .med-name { font-size: 14px; font-weight: 600; }
+  .med-meta { font-size: 11px; color: var(--label3); margin-top: 2px; }
+  .med-timer {
+    font-size: 12px; font-weight: 700;
+    padding: 5px 10px; border-radius: 10px;
+    white-space: nowrap; text-align: right;
+  }
+  .med-timer.wait { background: rgba(0,122,255,0.08); color: var(--blue); }
+  .med-timer.ready { background: rgba(52,199,89,0.1); color: var(--green); }
+
+  /* Since label */
+  .since-label {
+    font-size: 12px; color: var(--label3);
+    text-align: center; padding: 10px 0 0;
+    border-top: 0.5px solid var(--sep);
+    margin-top: 8px;
+  }
+  .since-label strong { color: var(--label2); }
+
+  /* Mini chart */
+  .mini-chart-card {
+    background: var(--card); border-radius: 16px;
+    padding: 14px 16px; margin-bottom: 10px;
+  }
+  .mini-chart-header {
+    display: flex; justify-content: space-between;
+    align-items: baseline; margin-bottom: 10px;
+  }
+  .mini-chart-title { font-size: 13px; font-weight: 600; }
+  .mini-chart-sub { font-size: 11px; color: var(--label3); }
+
+  /* ═══════════════════════════════════
+     SCREEN 2 — RECORD ENTRY
+  ═══════════════════════════════════ */
+  .temp-ring-wrap {
+    display: flex; justify-content: center;
+    padding: 12px 0 8px;
+  }
+  .temp-ring {
+    width: 180px; height: 180px;
+    position: relative;
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column;
+  }
+  .temp-ring svg { position: absolute; top: 0; left: 0; }
+  .temp-val { font-size: 46px; font-weight: 300; letter-spacing: -0.04em; color: var(--label1); }
+  .temp-c   { font-size: 18px; font-weight: 400; color: var(--label3); }
+  .temp-hint-sm { font-size: 11px; color: var(--label4); margin-top: 2px; }
+
+  .stepper {
+    display: flex; align-items: center;
+    justify-content: center; gap: 20px;
+    margin-bottom: 16px;
+  }
+  .step-btn {
+    width: 44px; height: 44px; border-radius: 14px;
+    background: var(--fill2); border: none;
+    font-size: 24px; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; color: var(--blue); font-family: inherit;
+  }
+  .step-label { font-size: 13px; font-weight: 500; color: var(--label3); }
+
+  .seg {
+    display: flex; background: var(--fill2);
+    border-radius: 10px; padding: 2px;
+    margin-bottom: 14px;
+  }
+  .seg-item {
+    flex: 1; text-align: center;
+    padding: 7px 4px;
+    border-radius: 8px;
+    font-size: 13px; font-weight: 500;
+    color: var(--label3); cursor: pointer;
+  }
+  .seg-item.on {
+    background: var(--card);
+    color: var(--label1); font-weight: 600;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+  }
+
+  .input-label {
+    font-size: 12px; font-weight: 600;
+    color: var(--label3); margin-bottom: 8px;
+    letter-spacing: 0.03em;
+  }
+  .chips-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+  .chip {
+    padding: 7px 13px; border-radius: 20px;
+    font-size: 13px; font-weight: 500;
+    background: var(--fill2); color: var(--label2);
+    cursor: pointer; border: 1.5px solid transparent;
+    transition: all 0.15s;
+  }
+  .chip.on {
+    background: rgba(0,122,255,0.08);
+    border-color: rgba(0,122,255,0.25);
+    color: var(--blue); font-weight: 600;
+  }
+
+  .time-row {
+    display: flex; align-items: center;
+    padding: 12px 0;
+    border-top: 0.5px solid var(--sep);
+    gap: 8px;
+  }
+  .time-row-label { font-size: 13px; color: var(--label2); flex: 1; }
+  .time-row-val { font-size: 14px; font-weight: 600; }
+  .time-row-btn { font-size: 13px; font-weight: 500; color: var(--blue); }
+
+  .save-btn {
+    width: 100%; padding: 15px;
+    background: var(--blue); color: #fff;
+    border: none; border-radius: 14px;
+    font-size: 16px; font-weight: 600;
+    font-family: inherit; cursor: pointer;
+    margin-top: 4px;
+    letter-spacing: -0.01em;
+  }
+
+  /* ═══════════════════════════════════
+     SCREEN 3 — CHART
+  ═══════════════════════════════════ */
+  .chart-wrap {
+    background: var(--card); border-radius: 16px;
+    padding: 16px; margin-bottom: 10px;
+  }
+  .chart-top {
+    display: flex; justify-content: space-between;
+    align-items: flex-start; margin-bottom: 14px;
+  }
+  .chart-label { font-size: 13px; font-weight: 600; }
+  .chart-sub { font-size: 11px; color: var(--label3); margin-top: 2px; }
+  .chart-range {
+    display: flex; gap: 4px;
+  }
+  .cr-btn {
+    font-size: 11px; font-weight: 600;
+    padding: 4px 9px; border-radius: 8px;
+    background: var(--fill2); color: var(--label3);
+  }
+  .cr-btn.on { background: var(--blue); color: #fff; }
+
+  /* History rows */
+  .hist-item {
+    display: flex; align-items: center;
+    gap: 12px; padding: 10px 0;
+    border-bottom: 0.5px solid var(--sep);
+  }
+  .hist-item:last-child { border-bottom: none; }
+  .hist-time { font-size: 12px; font-weight: 500; color: var(--label3); min-width: 40px; }
+  .hist-icon {
+    width: 34px; height: 34px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px; flex-shrink: 0;
+  }
+  .hist-info { flex: 1; }
+  .hist-name { font-size: 14px; font-weight: 600; }
+  .hist-note { font-size: 11px; color: var(--label3); margin-top: 1px; }
+  .hist-tag {
+    font-size: 11px; font-weight: 600;
+    padding: 3px 9px; border-radius: 8px;
+  }
+
+  /* ═══════════════════════════════════
+     SCREEN 4 — WIDGET (dark wallpaper)
+  ═══════════════════════════════════ */
+  .wallpaper-wrap {
+    background: #000;
+    border-radius: 40px;
+    overflow: hidden;
+  }
+  .wallpaper-bg {
+    background: linear-gradient(180deg, #0A0A1A 0%, #0D1B2A 50%, #071014 100%);
+    position: relative;
+    min-height: 700px;
+    padding: 54px 14px 20px;
+  }
+  .wallpaper-bg::before {
+    content: '';
+    position: absolute;
+    top: 80px; left: 30px;
+    width: 120px; height: 120px;
+    background: radial-gradient(circle, rgba(0,122,255,0.15) 0%, transparent 70%);
+  }
+  .wallpaper-bg::after {
+    content: '';
+    position: absolute;
+    top: 60px; right: 20px;
+    width: 160px; height: 160px;
+    background: radial-gradient(circle, rgba(255,59,48,0.1) 0%, transparent 70%);
+  }
+  .wp-time { font-size: 76px; font-weight: 200; color: #fff; text-align: center; line-height: 1; letter-spacing: -0.04em; }
+  .wp-date { font-size: 14px; color: rgba(255,255,255,0.5); text-align: center; margin-bottom: 22px; font-weight: 400; }
+
+  .widget {
+    background: rgba(30,30,40,0.7);
+    backdrop-filter: blur(40px) saturate(180%);
+    -webkit-backdrop-filter: blur(40px) saturate(180%);
+    border: 0.5px solid rgba(255,255,255,0.12);
+    border-radius: 20px;
+    padding: 14px 16px;
+    margin-bottom: 12px;
+  }
+  .w-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 10px;
+  }
+  .w-app { font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(255,255,255,0.35); }
+  .w-child { font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.75); }
+
+  .w-temp-row { display: flex; align-items: baseline; gap: 3px; }
+  .w-temp { font-size: 42px; font-weight: 300; color: #fff; letter-spacing: -0.04em; line-height: 1; }
+  .w-unit { font-size: 18px; font-weight: 300; color: rgba(255,255,255,0.45); }
+  .w-status { font-size: 12px; color: rgba(255,59,48,0.85); font-weight: 500; margin-top: 2px; margin-bottom: 10px; }
+
+  .w-mini-chart { width: 100%; height: 38px; margin-bottom: 10px; }
+
+  .w-med-row {
+    display: flex; align-items: center; gap: 8px;
+    background: rgba(255,255,255,0.06);
+    border: 0.5px solid rgba(255,255,255,0.1);
+    border-radius: 10px;
+    padding: 8px 10px; margin-bottom: 10px;
+  }
+  .w-med-text { font-size: 12px; color: rgba(255,255,255,0.7); flex: 1; line-height: 1.4; }
+  .w-med-badge {
+    background: rgba(0,122,255,0.25);
+    border: 0.5px solid rgba(0,122,255,0.4);
+    color: #5AC8FA;
+    font-size: 11px; font-weight: 700;
+    padding: 4px 9px; border-radius: 8px;
+    white-space: nowrap;
+  }
+
+  .w-actions { display: flex; gap: 8px; }
+  .w-action {
+    flex: 1;
+    background: rgba(255,255,255,0.07);
+    border: 0.5px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    padding: 9px 6px;
+    text-align: center;
+  }
+  .w-action-icon { font-size: 16px; margin-bottom: 3px; }
+  .w-action-label { font-size: 10px; font-weight: 600; color: rgba(255,255,255,0.6); }
+
+  /* Widget greeting (no fever) */
+  .widget-greet {
+    background: rgba(30,50,30,0.65);
+    backdrop-filter: blur(40px);
+    border: 0.5px solid rgba(52,199,89,0.2);
+    border-radius: 20px;
+    padding: 14px 16px;
+    margin-bottom: 12px;
+  }
+  .wg-emoji { font-size: 26px; margin-bottom: 4px; }
+  .wg-title { font-size: 16px; font-weight: 600; color: #fff; margin-bottom: 3px; }
+  .wg-sub { font-size: 11px; color: rgba(255,255,255,0.45); }
+
+  /* ═══════════════════════════════════
+     SCREEN 5 — HEALTHY / NO FEVER
+  ═══════════════════════════════════ */
+  .health-banner {
+    background: linear-gradient(160deg, #1A2A1A 0%, #1C2B20 100%);
+    border-radius: 20px; padding: 20px;
+    margin-bottom: 10px; position: relative; overflow: hidden;
+  }
+  .health-banner::before {
+    content: '';
+    position: absolute; top: -30px; right: -30px;
+    width: 140px; height: 140px;
+    background: radial-gradient(circle, rgba(52,199,89,0.2) 0%, transparent 70%);
+  }
+  .hb-label { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255,255,255,0.35); margin-bottom: 8px; }
+  .hb-title { font-size: 26px; font-weight: 600; color: #fff; letter-spacing: -0.02em; margin-bottom: 4px; }
+  .hb-sub { font-size: 13px; color: rgba(255,255,255,0.45); margin-bottom: 16px; }
+  .hb-stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1px; background: rgba(255,255,255,0.07); border-radius: 12px; overflow: hidden; }
+  .hb-stat { background: rgba(255,255,255,0.04); padding: 10px 8px; text-align: center; }
+  .hb-stat-val { font-size: 17px; font-weight: 600; color: #fff; }
+  .hb-stat-lbl { font-size: 10px; color: rgba(255,255,255,0.4); margin-top: 2px; }
+
+  .start-btn {
+    width: 100%; padding: 15px;
+    background: var(--label1); color: #fff;
+    border: none; border-radius: 14px;
+    font-size: 16px; font-weight: 600;
+    font-family: inherit; cursor: pointer;
+    margin-bottom: 10px;
+  }
+
+  .icloud-row {
+    display: flex; align-items: center; gap: 12px;
+  }
+  .icloud-icon {
+    width: 36px; height: 36px; border-radius: 10px;
+    background: rgba(0,122,255,0.1);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; flex-shrink: 0;
+  }
+  .icloud-text { flex: 1; }
+  .icloud-title { font-size: 13px; font-weight: 600; }
+  .icloud-sub { font-size: 11px; color: var(--label3); margin-top: 2px; line-height: 1.4; }
+  .icloud-check { font-size: 13px; color: var(--green); }
+
+  /* ═══════════════════════════════════
+     SCREEN 6 — SUBSCRIPTION
+  ═══════════════════════════════════ */
+  .sub-hero {
+    background: linear-gradient(160deg, #1A1A2E 0%, #16213E 50%, #1a1035 100%);
+    border-radius: 20px; padding: 24px 20px;
+    margin-bottom: 10px; text-align: center; position: relative; overflow: hidden;
+  }
+  .sub-hero::before {
+    content: '';
+    position: absolute; top: -60px; left: 50%;
+    transform: translateX(-50%);
+    width: 200px; height: 200px;
+    background: radial-gradient(circle, rgba(88,86,214,0.35) 0%, transparent 70%);
+  }
+  .sub-icon { font-size: 40px; margin-bottom: 10px; }
+  .sub-title { font-size: 22px; font-weight: 700; color: #fff; letter-spacing: -0.02em; margin-bottom: 6px; }
+  .sub-desc { font-size: 13px; color: rgba(255,255,255,0.5); line-height: 1.5; margin-bottom: 20px; }
+
+  .sub-feats { text-align: left; margin-bottom: 20px; display: flex; flex-direction: column; gap: 10px; }
+  .sub-feat { display: flex; align-items: center; gap: 10px; }
+  .sub-feat-icon { width: 28px; height: 28px; border-radius: 8px; background: rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+  .sub-feat-text { font-size: 13px; color: rgba(255,255,255,0.8); }
+
+  .sub-btn {
+    width: 100%; padding: 15px;
+    background: linear-gradient(135deg, #5856D6, #7B6CF6);
+    color: #fff; border: none; border-radius: 14px;
+    font-size: 16px; font-weight: 700; font-family: inherit;
+    cursor: pointer; margin-bottom: 8px;
+  }
+  .sub-note { font-size: 11px; color: rgba(255,255,255,0.3); text-align: center; }
+
+  .free-list { display: flex; flex-direction: column; gap: 0; }
+  .free-row {
+    display: flex; align-items: center;
+    padding: 11px 0;
+    border-bottom: 0.5px solid var(--sep);
+    gap: 10px;
+  }
+  .free-row:last-child { border-bottom: none; }
+  .free-row-icon { font-size: 15px; flex-shrink: 0; }
+  .free-row-label { font-size: 14px; flex: 1; }
+  .free-row-check { font-size: 14px; font-weight: 600; color: var(--green); }
+  .free-row-lock { font-size: 13px; color: var(--label4); }
+
+  /* ═══════════════════════════════════
+     SPEC TABLE
+  ═══════════════════════════════════ */
+  .spec-section {
+    max-width: 860px;
+    width: 100%;
+    background: var(--card);
+    border-radius: 20px;
+    overflow: hidden;
+    margin-bottom: 56px;
+  }
+  .spec-title { font-size: 13px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--label3); padding: 20px 24px 12px; border-bottom: 0.5px solid var(--sep); }
+  table.spec { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.spec thead tr th { padding: 11px 16px; text-align: left; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--label3); background: var(--fill3); border-bottom: 0.5px solid var(--sep); }
+  table.spec thead tr th:not(:first-child) { text-align: center; }
+  table.spec tbody tr { border-bottom: 0.5px solid var(--sep); }
+  table.spec tbody tr:last-child { border-bottom: none; }
+  table.spec td { padding: 11px 16px; color: var(--label2); vertical-align: middle; }
+  table.spec td:not(:first-child) { text-align: center; }
+  table.spec td.module { font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--label3); background: var(--fill3); }
+  table.spec td .yes { color: var(--green); font-size: 15px; }
+  table.spec td .no  { color: var(--label4); font-size: 13px; }
+  table.spec td .pro { font-size: 11px; font-weight: 700; color: var(--indigo); background: rgba(88,86,214,0.1); padding: 2px 8px; border-radius: 6px; }
+</style>
+</head>
+<body>
+<div class="canvas">
+
+  <p class="canvas-title">Product Design · iOS App</p>
+  <p class="canvas-app">🌡 烧退了</p>
+  <p class="canvas-desc">儿童发烧记录 · 桌面小组件 · iCloud 家庭同步</p>
+
+  <!-- ─── ROW 1: Home + Record ─── -->
+  <div class="row-label">主要页面</div>
+  <div class="row">
+
+    <!-- S1: Home Active -->
+    <div class="phone-col">
+      <div class="screen-name">首页 · 发烧中</div>
+      <div class="phone">
+        <div class="phone-inner">
+          <div class="dynamic-island"></div>
+          <div class="status-bar">
+            <span class="time">9:41</span>
+            <div class="status-icons">
+              <svg width="17" height="12" viewBox="0 0 17 12"><rect x="0" y="3" width="3" height="9" rx="1" fill="#000" opacity=".3"/><rect x="4.5" y="2" width="3" height="10" rx="1" fill="#000" opacity=".5"/><rect x="9" y="0" width="3" height="12" rx="1" fill="#000" opacity=".7"/><rect x="13.5" y="0" width="3" height="12" rx="1" fill="#000"/></svg>
+              <svg width="15" height="11" viewBox="0 0 15 11"><path d="M7.5 2.5C9.5 2.5 11.3 3.3 12.6 4.6L14 3.2C12.3 1.5 10 0.5 7.5 0.5C5 0.5 2.7 1.5 1 3.2L2.4 4.6C3.7 3.3 5.5 2.5 7.5 2.5Z" fill="#000"/><path d="M7.5 5.5C8.8 5.5 10 6 10.9 6.9L12.3 5.5C11 4.2 9.3 3.5 7.5 3.5C5.7 3.5 4 4.2 2.7 5.5L4.1 6.9C5 6 6.2 5.5 7.5 5.5Z" fill="#000"/><circle cx="7.5" cy="9.5" r="1.5" fill="#000"/></svg>
+              <svg width="25" height="12" viewBox="0 0 25 12"><rect x="0" y="1" width="22" height="10" rx="3" stroke="#000" stroke-opacity=".35" stroke-width="1" fill="none"/><rect x="1.5" y="2.5" width="18" height="7" rx="1.5" fill="#000"/><path d="M23 4.5v3a1.5 1.5 0 0 0 0-3Z" fill="#000" opacity=".4"/></svg>
+            </div>
+          </div>
+          <div class="nav">
+            <div style="width:30px"></div>
+            <div class="nav-title">烧退了</div>
+            <div class="nav-btn">⚙</div>
+          </div>
+          <div class="scroll">
+
+            <div class="fever-hero">
+              <div class="fh-eyebrow">
+                <div class="fh-pulse"></div>
+                小明 · 发烧中
+              </div>
+              <div class="fh-temp-row">
+                <span class="fh-temp">38.9</span>
+                <span class="fh-unit">°C</span>
+              </div>
+              <div class="fh-badge">⬆ 较上次 +0.8°</div>
+              <div class="fh-stats">
+                <div class="fh-stat">
+                  <div class="fh-stat-val">8h 30m</div>
+                  <div class="fh-stat-lbl">本次发烧</div>
+                </div>
+                <div class="fh-stat">
+                  <div class="fh-stat-val">4h 20m</div>
+                  <div class="fh-stat-lbl">距上次用药</div>
+                </div>
+                <div class="fh-stat">
+                  <div class="fh-stat-val">21:30</div>
+                  <div class="fh-stat-lbl">最近记录</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="quick-row">
+              <button class="quick-btn red">
+                <span class="quick-btn-icon">🌡</span>
+                <span class="quick-btn-label">记录体温</span>
+              </button>
+              <button class="quick-btn blue">
+                <span class="quick-btn-icon">💊</span>
+                <span class="quick-btn-label">记录用药</span>
+              </button>
+            </div>
+
+            <div class="card">
+              <div class="card-inner">
+                <div class="med-header-row">
+                  <span class="med-h-title">用药情况</span>
+                  <span class="pill-badge blue">今日 2 次</span>
+                </div>
+                <div class="med-item">
+                  <div class="med-dot yellow">🟡</div>
+                  <div class="med-info">
+                    <div class="med-name">布洛芬</div>
+                    <div class="med-meta">17:10 服用 · 距今 4h 20m</div>
+                  </div>
+                  <div class="med-timer wait">1h 40m 后</div>
+                </div>
+                <div class="med-item">
+                  <div class="med-dot blue">🔵</div>
+                  <div class="med-info">
+                    <div class="med-name">对乙酰氨基酚</div>
+                    <div class="med-meta">13:00 服用 · 距今 8h 30m</div>
+                  </div>
+                  <div class="med-timer ready">✓ 现可用</div>
+                </div>
+                <div class="since-label">距上次服用布洛芬已过 <strong>4 小时 20 分</strong></div>
+              </div>
+            </div>
+
+            <div class="mini-chart-card">
+              <div class="mini-chart-header">
+                <span class="mini-chart-title">本次发烧趋势</span>
+                <span class="mini-chart-sub">从 13:00 起</span>
+              </div>
+              <svg viewBox="0 0 287 72" style="width:100%;height:72px;overflow:visible">
+                <defs>
+                  <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#FF3B30" stop-opacity="0.18"/>
+                    <stop offset="100%" stop-color="#FF3B30" stop-opacity="0"/>
+                  </linearGradient>
+                </defs>
+                <!-- Normal band -->
+                <rect x="0" y="52" width="287" height="16" fill="rgba(52,199,89,0.08)" rx="4"/>
+                <!-- Fever threshold -->
+                <line x1="0" y1="42" x2="287" y2="42" stroke="#FF3B30" stroke-width="1" stroke-dasharray="4,4" opacity="0.3"/>
+                <!-- Area -->
+                <path d="M0,62 C30,56 55,46 88,36 C115,27 138,22 160,18 C182,14 210,12 240,11 C260,10 275,11 287,12 L287,68 L0,68Z" fill="url(#g1)"/>
+                <!-- Line -->
+                <path d="M0,62 C30,56 55,46 88,36 C115,27 138,22 160,18 C182,14 210,12 240,11 C260,10 275,11 287,12" fill="none" stroke="#FF3B30" stroke-width="2" stroke-linecap="round"/>
+                <!-- Med marker -->
+                <line x1="88" y1="4" x2="88" y2="68" stroke="#007AFF" stroke-width="1" stroke-dasharray="3,3" opacity="0.6"/>
+                <circle cx="88" cy="4" r="4" fill="#007AFF"/>
+                <!-- Dots -->
+                <circle cx="0"   cy="62" r="3" fill="#34C759" stroke="#fff" stroke-width="1.5"/>
+                <circle cx="88"  cy="36" r="3" fill="#FF3B30" stroke="#fff" stroke-width="1.5"/>
+                <circle cx="160" cy="18" r="3" fill="#FF3B30" stroke="#fff" stroke-width="1.5"/>
+                <circle cx="240" cy="11" r="3" fill="#FF3B30" stroke="#fff" stroke-width="1.5"/>
+                <circle cx="287" cy="12" r="4" fill="#FF3B30" stroke="#fff" stroke-width="2"/>
+                <!-- X labels -->
+                <text x="0"   y="72" font-size="9" fill="rgba(60,60,67,0.4)" text-anchor="middle">13:00</text>
+                <text x="88"  y="72" font-size="9" fill="#007AFF" text-anchor="middle">16:30</text>
+                <text x="160" y="72" font-size="9" fill="rgba(60,60,67,0.4)" text-anchor="middle">19:00</text>
+                <text x="287" y="72" font-size="9" fill="rgba(60,60,67,0.4)" text-anchor="middle">21:30</text>
+              </svg>
+            </div>
+
+          </div>
+          <!-- FAB -->
+          <div style="position:absolute;bottom:68px;right:18px;z-index:20">
+            <div style="width:48px;height:48px;background:#FF3B30;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:24px;color:#fff;box-shadow:0 4px 16px rgba(255,59,48,0.45)">+</div>
+          </div>
+          <div class="tab-bar">
+            <div class="tab active"><div class="tab-icon">🏠</div>首页</div>
+            <div class="tab"><div class="tab-icon">📈</div>图表</div>
+            <div class="tab"><div class="tab-icon">👤</div>我的</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- S2: Record -->
+    <div class="phone-col">
+      <div class="screen-name">记录页</div>
+      <div class="phone">
+        <div class="phone-inner">
+          <div class="dynamic-island"></div>
+          <div class="status-bar">
+            <span class="time">9:41</span>
+            <div class="status-icons">
+              <svg width="17" height="12" viewBox="0 0 17 12"><rect x="0" y="3" width="3" height="9" rx="1" fill="#000" opacity=".3"/><rect x="4.5" y="2" width="3" height="10" rx="1" fill="#000" opacity=".5"/><rect x="9" y="0" width="3" height="12" rx="1" fill="#000" opacity=".7"/><rect x="13.5" y="0" width="3" height="12" rx="1" fill="#000"/></svg>
+              <svg width="15" height="11" viewBox="0 0 15 11"><path d="M7.5 2.5C9.5 2.5 11.3 3.3 12.6 4.6L14 3.2C12.3 1.5 10 0.5 7.5 0.5C5 0.5 2.7 1.5 1 3.2L2.4 4.6C3.7 3.3 5.5 2.5 7.5 2.5Z" fill="#000"/><path d="M7.5 5.5C8.8 5.5 10 6 10.9 6.9L12.3 5.5C11 4.2 9.3 3.5 7.5 3.5C5.7 3.5 4 4.2 2.7 5.5L4.1 6.9C5 6 6.2 5.5 7.5 5.5Z" fill="#000"/><circle cx="7.5" cy="9.5" r="1.5" fill="#000"/></svg>
+              <svg width="25" height="12" viewBox="0 0 25 12"><rect x="0" y="1" width="22" height="10" rx="3" stroke="#000" stroke-opacity=".35" stroke-width="1" fill="none"/><rect x="1.5" y="2.5" width="18" height="7" rx="1.5" fill="#000"/><path d="M23 4.5v3a1.5 1.5 0 0 0 0-3Z" fill="#000" opacity=".4"/></svg>
+            </div>
+          </div>
+          <div class="nav">
+            <span class="nav-action">取消</span>
+            <div class="nav-title">新记录</div>
+            <span class="nav-action" style="color:var(--label4)">保存</span>
+          </div>
+          <div class="scroll">
+
+            <div class="seg">
+              <div class="seg-item on">🌡 体温</div>
+              <div class="seg-item">💊 用药</div>
+            </div>
+
+            <div class="temp-ring-wrap">
+              <div class="temp-ring">
+                <svg width="180" height="180" viewBox="0 0 180 180">
+                  <circle cx="90" cy="90" r="80" stroke="rgba(0,0,0,0.06)" stroke-width="8" fill="none"/>
+                  <circle cx="90" cy="90" r="80" stroke="#FF3B30" stroke-width="8" fill="none"
+                    stroke-dasharray="390" stroke-dashoffset="100"
+                    stroke-linecap="round"
+                    transform="rotate(-90 90 90)"/>
+                </svg>
+                <div class="temp-val">38.9</div>
+                <div class="temp-c">°C</div>
+                <div class="temp-hint-sm">拖动调整</div>
+              </div>
+            </div>
+
+            <div class="stepper">
+              <button class="step-btn">−</button>
+              <span class="step-label">0.1°C 微调</span>
+              <button class="step-btn">+</button>
+            </div>
+
+            <div style="height:0.5px;background:var(--sep);margin-bottom:14px;"></div>
+
+            <div class="input-label">测量方式</div>
+            <div class="chips-row">
+              <div class="chip on">腋下</div>
+              <div class="chip">耳温</div>
+              <div class="chip">肛温</div>
+              <div class="chip">口腔</div>
+              <div class="chip">额温</div>
+            </div>
+
+            <div class="input-label">同时记录用药</div>
+            <div class="chips-row">
+              <div class="chip">🟡 布洛芬</div>
+              <div class="chip">🔵 对乙酰氨基酚</div>
+              <div class="chip">⚪ 其他</div>
+              <div class="chip">无</div>
+            </div>
+
+            <div class="card">
+              <div class="card-inner" style="padding-top:0;padding-bottom:0">
+                <div class="time-row">
+                  <span class="time-row-label">记录时间</span>
+                  <span class="time-row-val">今天 21:38</span>
+                  <span class="time-row-btn">修改</span>
+                </div>
+                <div class="time-row" style="border-bottom:none">
+                  <span class="time-row-label" style="color:var(--label3)">备注（可选）</span>
+                </div>
+              </div>
+            </div>
+
+            <button class="save-btn">保存记录</button>
+
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /row1 -->
+
+  <!-- ─── ROW 2: Chart + Widget ─── -->
+  <div class="row-label">图表 & 小组件</div>
+  <div class="row">
+
+    <!-- S3: Chart -->
+    <div class="phone-col">
+      <div class="screen-name">图表页</div>
+      <div class="phone">
+        <div class="phone-inner">
+          <div class="dynamic-island"></div>
+          <div class="status-bar">
+            <span class="time">9:41</span>
+            <div class="status-icons">
+              <svg width="17" height="12" viewBox="0 0 17 12"><rect x="0" y="3" width="3" height="9" rx="1" fill="#000" opacity=".3"/><rect x="4.5" y="2" width="3" height="10" rx="1" fill="#000" opacity=".5"/><rect x="9" y="0" width="3" height="12" rx="1" fill="#000" opacity=".7"/><rect x="13.5" y="0" width="3" height="12" rx="1" fill="#000"/></svg>
+              <svg width="15" height="11" viewBox="0 0 15 11"><path d="M7.5 2.5C9.5 2.5 11.3 3.3 12.6 4.6L14 3.2C12.3 1.5 10 0.5 7.5 0.5C5 0.5 2.7 1.5 1 3.2L2.4 4.6C3.7 3.3 5.5 2.5 7.5 2.5Z" fill="#000"/><path d="M7.5 5.5C8.8 5.5 10 6 10.9 6.9L12.3 5.5C11 4.2 9.3 3.5 7.5 3.5C5.7 3.5 4 4.2 2.7 5.5L4.1 6.9C5 6 6.2 5.5 7.5 5.5Z" fill="#000"/><circle cx="7.5" cy="9.5" r="1.5" fill="#000"/></svg>
+              <svg width="25" height="12" viewBox="0 0 25 12"><rect x="0" y="1" width="22" height="10" rx="3" stroke="#000" stroke-opacity=".35" stroke-width="1" fill="none"/><rect x="1.5" y="2.5" width="18" height="7" rx="1.5" fill="#000"/><path d="M23 4.5v3a1.5 1.5 0 0 0 0-3Z" fill="#000" opacity=".4"/></svg>
+            </div>
+          </div>
+          <div class="nav">
+            <div style="width:30px"></div>
+            <div class="nav-title">体温趋势</div>
+            <div class="nav-btn" style="font-size:12px">↑</div>
+          </div>
+          <div class="scroll">
+
+            <div class="chart-wrap">
+              <div class="chart-top">
+                <div>
+                  <div class="chart-label">本次发烧</div>
+                  <div class="chart-sub">5月11日 13:00 起</div>
+                </div>
+                <div class="chart-range">
+                  <div class="cr-btn on">今天</div>
+                  <div class="cr-btn">昨天</div>
+                  <div class="cr-btn">7天</div>
+                </div>
+              </div>
+              <svg viewBox="0 0 287 190" style="width:100%;height:190px;overflow:visible">
+                <defs>
+                  <linearGradient id="g2" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#FF3B30" stop-opacity="0.14"/>
+                    <stop offset="100%" stop-color="#FF3B30" stop-opacity="0"/>
+                  </linearGradient>
+                </defs>
+                <!-- Grid lines -->
+                <line x1="32" y1="20"  x2="287" y2="20"  stroke="var(--sep)" stroke-width="0.5"/>
+                <line x1="32" y1="60"  x2="287" y2="60"  stroke="var(--sep)" stroke-width="0.5"/>
+                <line x1="32" y1="100" x2="287" y2="100" stroke="var(--sep)" stroke-width="0.5"/>
+                <line x1="32" y1="140" x2="287" y2="140" stroke="var(--sep)" stroke-width="0.5"/>
+                <line x1="32" y1="170" x2="287" y2="170" stroke="var(--sep)" stroke-width="0.5"/>
+                <!-- Normal band -->
+                <rect x="32" y="140" width="255" height="30" fill="rgba(52,199,89,0.07)" rx="3"/>
+                <!-- Y labels -->
+                <text x="28" y="23"  font-size="9" fill="rgba(60,60,67,0.4)" text-anchor="end">40°</text>
+                <text x="28" y="63"  font-size="9" fill="rgba(60,60,67,0.4)" text-anchor="end">39°</text>
+                <text x="28" y="103" font-size="9" fill="rgba(255,59,48,0.6)" text-anchor="end">38.5°</text>
+                <text x="28" y="143" font-size="9" fill="rgba(52,199,89,0.8)" text-anchor="end">37°</text>
+                <text x="28" y="173" font-size="9" fill="rgba(60,60,67,0.4)" text-anchor="end">36°</text>
+                <!-- Fever threshold -->
+                <line x1="32" y1="100" x2="287" y2="100" stroke="#FF3B30" stroke-width="1" stroke-dasharray="4,4" opacity="0.25"/>
+                <!-- Medication lines -->
+                <line x1="95"  y1="8" x2="95"  y2="175" stroke="#007AFF" stroke-width="1" stroke-dasharray="3,3" opacity="0.5"/>
+                <line x1="175" y1="8" x2="175" y2="175" stroke="#5856D6" stroke-width="1" stroke-dasharray="3,3" opacity="0.5"/>
+                <!-- Med labels -->
+                <rect x="63" y="4" width="64" height="14" rx="7" fill="#007AFF"/>
+                <text x="95" y="14" font-size="8.5" fill="#fff" text-anchor="middle" font-weight="600">💊 布洛芬</text>
+                <rect x="144" y="4" width="62" height="14" rx="7" fill="#5856D6"/>
+                <text x="175" y="14" font-size="8.5" fill="#fff" text-anchor="middle" font-weight="600">💊 对乙酰氨基酚</text>
+                <!-- Area -->
+                <path d="M40,162 C60,152 76,132 95,112 C114,92 130,76 150,67 C168,59 188,54 210,50 C232,46 255,44 287,46 L287,175 L40,175Z" fill="url(#g2)"/>
+                <!-- Line -->
+                <path d="M40,162 C60,152 76,132 95,112 C114,92 130,76 150,67 C168,59 188,54 210,50 C232,46 255,44 287,46" fill="none" stroke="#FF3B30" stroke-width="2" stroke-linecap="round"/>
+                <!-- Points with labels -->
+                <circle cx="40"  cy="162" r="3.5" fill="#34C759" stroke="#fff" stroke-width="2"/>
+                <text x="40"  y="158" font-size="8" fill="#34C759" text-anchor="middle" font-weight="600">36.8</text>
+                <circle cx="95"  cy="112" r="3.5" fill="#FF3B30" stroke="#fff" stroke-width="2"/>
+                <text x="95"  y="108" font-size="8" fill="#FF3B30" text-anchor="middle" font-weight="600">38.7</text>
+                <circle cx="150" cy="67"  r="3.5" fill="#FF3B30" stroke="#fff" stroke-width="2"/>
+                <text x="150" y="63"  font-size="8" fill="#FF3B30" text-anchor="middle" font-weight="600">39.3</text>
+                <circle cx="210" cy="50"  r="3.5" fill="#FF3B30" stroke="#fff" stroke-width="2"/>
+                <text x="210" y="46"  font-size="8" fill="#FF3B30" text-anchor="middle" font-weight="600">39.5</text>
+                <circle cx="287" cy="46"  r="4.5" fill="#FF3B30" stroke="#fff" stroke-width="2"/>
+                <text x="275" y="42"  font-size="8" fill="#FF3B30" text-anchor="middle" font-weight="600">38.9</text>
+                <!-- X labels -->
+                <text x="40"  y="185" font-size="9" fill="rgba(60,60,67,0.4)" text-anchor="middle">13:00</text>
+                <text x="95"  y="185" font-size="9" fill="#007AFF" text-anchor="middle">14:30</text>
+                <text x="150" y="185" font-size="9" fill="rgba(60,60,67,0.4)" text-anchor="middle">17:00</text>
+                <text x="210" y="185" font-size="9" fill="rgba(60,60,67,0.4)" text-anchor="middle">19:30</text>
+                <text x="278" y="185" font-size="9" fill="rgba(60,60,67,0.4)" text-anchor="middle">21:30</text>
+              </svg>
+              <!-- Legend -->
+              <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:10px">
+                <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--label3)">
+                  <svg width="12" height="12"><circle cx="6" cy="6" r="4" fill="#FF3B30"/></svg>体温
+                </div>
+                <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--label3)">
+                  <svg width="16" height="8"><line x1="0" y1="4" x2="16" y2="4" stroke="#007AFF" stroke-width="1.5" stroke-dasharray="3,3"/></svg>布洛芬
+                </div>
+                <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--label3)">
+                  <svg width="16" height="8"><line x1="0" y1="4" x2="16" y2="4" stroke="#5856D6" stroke-width="1.5" stroke-dasharray="3,3"/></svg>对乙酰氨基酚
+                </div>
+                <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--label3)">
+                  <svg width="16" height="8"><rect x="0" y="0" width="16" height="8" rx="2" fill="rgba(52,199,89,0.2)"/></svg>正常区间
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-inner">
+                <div style="font-size:13px;font-weight:600;margin-bottom:10px">记录明细</div>
+                <div class="hist-item">
+                  <div class="hist-time">21:30</div>
+                  <div class="hist-icon" style="background:rgba(255,59,48,0.08)">🌡</div>
+                  <div class="hist-info">
+                    <div class="hist-name" style="color:#FF3B30">38.9°C</div>
+                    <div class="hist-note">腋下测量</div>
+                  </div>
+                  <div class="hist-tag" style="background:rgba(255,59,48,0.08);color:#FF3B30">高烧</div>
+                </div>
+                <div class="hist-item">
+                  <div class="hist-time">17:10</div>
+                  <div class="hist-icon" style="background:rgba(255,204,0,0.12)">💊</div>
+                  <div class="hist-info">
+                    <div class="hist-name">布洛芬</div>
+                    <div class="hist-note">同时记录 39.5°C</div>
+                  </div>
+                  <div class="hist-tag" style="background:rgba(0,122,255,0.08);color:#007AFF">用药</div>
+                </div>
+                <div class="hist-item">
+                  <div class="hist-time">16:30</div>
+                  <div class="hist-icon" style="background:rgba(255,59,48,0.08)">🌡</div>
+                  <div class="hist-info">
+                    <div class="hist-name" style="color:#FF3B30">39.3°C</div>
+                    <div class="hist-note">耳温</div>
+                  </div>
+                  <div class="hist-tag" style="background:rgba(255,59,48,0.08);color:#FF3B30">高烧</div>
+                </div>
+                <div class="hist-item" style="border-bottom:none">
+                  <div class="hist-time">13:00</div>
+                  <div class="hist-icon" style="background:rgba(52,199,89,0.1)">🌡</div>
+                  <div class="hist-info">
+                    <div class="hist-name" style="color:#34C759">36.8°C</div>
+                    <div class="hist-note">腋下测量</div>
+                  </div>
+                  <div class="hist-tag" style="background:rgba(52,199,89,0.1);color:#34C759">正常</div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+          <div class="tab-bar">
+            <div class="tab"><div class="tab-icon">🏠</div>首页</div>
+            <div class="tab active"><div class="tab-icon">📈</div>图表</div>
+            <div class="tab"><div class="tab-icon">📋</div>记录</div>
+            <div class="tab"><div class="tab-icon">👤</div>我的</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- S4a: Widget FEVER -->
+    <div class="phone-col">
+      <div class="screen-name">桌面小组件 · 发烧中 🔴</div>
+      <div class="phone">
+        <div class="phone-inner">
+          <div class="dynamic-island"></div>
+          <div class="wallpaper-bg" style="position:relative">
+            <!-- lock-screen time -->
+            <div style="text-align:center;padding:52px 0 8px;">
+              <div style="font-size:64px;font-weight:200;color:#fff;line-height:1">9:41</div>
+              <div style="font-size:13px;color:rgba(255,255,255,0.65);margin-top:4px">5月11日 星期一</div>
+            </div>
+            <!-- WIDGET: fever active -->
+            <div style="margin:12px 14px 0;background:rgba(255,255,255,0.14);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border:1px solid rgba(255,255,255,0.22);border-radius:22px;padding:14px 15px;">
+              <!-- header -->
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+                <span style="font-size:10px;font-weight:700;color:rgba(255,255,255,0.55);letter-spacing:.06em;text-transform:uppercase">🌡️ 烧退了</span>
+                <span style="font-size:12px;font-weight:600;color:#fff">👧 小明</span>
+              </div>
+              <!-- temp + status -->
+              <div style="display:flex;align-items:baseline;gap:4px;">
+                <span style="font-size:40px;font-weight:700;color:#FF6B5B;line-height:1">38.9</span>
+                <span style="font-size:16px;color:rgba(255,255,255,0.7)">°C</span>
+                <span style="margin-left:6px;background:#FF3B30;color:#fff;font-size:10px;font-weight:700;padding:3px 8px;border-radius:20px;align-self:center">发烧中</span>
+              </div>
+              <div style="font-size:11px;color:rgba(255,255,255,0.6);margin:3px 0 10px">⏱ 本次发烧 8h 30min · 较上次 ↑0.8°</div>
+              <!-- mini chart -->
+              <svg viewBox="0 0 240 34" style="width:100%;height:34px;margin-bottom:10px">
+                <!-- fever threshold -->
+                <line x1="0" y1="20" x2="240" y2="20" stroke="rgba(255,107,91,0.3)" stroke-width="1" stroke-dasharray="3,3"/>
+                <!-- normal zone -->
+                <rect x="0" y="26" width="240" height="8" fill="rgba(52,199,89,0.15)" rx="2"/>
+                <!-- trend line -->
+                <polyline points="0,28 40,22 80,16 120,11 160,7 200,5 240,6" fill="none" stroke="#FF6B5B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <!-- med marker: ibuprofen -->
+                <line x1="80" y1="0" x2="80" y2="34" stroke="rgba(58,123,255,0.8)" stroke-width="1.2" stroke-dasharray="2,2"/>
+                <circle cx="80" cy="2" r="4" fill="#007AFF"/>
+                <text x="80" y="5" text-anchor="middle" font-size="5" fill="#fff">💊</text>
+                <!-- dots -->
+                <circle cx="0"   cy="28" r="2.5" fill="#34C759"/>
+                <circle cx="80"  cy="16" r="2.5" fill="#FF9500"/>
+                <circle cx="160" cy="7"  r="2.5" fill="#FF3B30"/>
+                <circle cx="240" cy="6"  r="3"   fill="#FF3B30" stroke="rgba(255,255,255,0.5)" stroke-width="1.5"/>
+                <!-- x labels -->
+                <text x="0"   y="34" font-size="7" fill="rgba(255,255,255,0.4)" text-anchor="start">13:00</text>
+                <text x="80"  y="34" font-size="7" fill="rgba(58,123,255,0.8)" text-anchor="middle">16:30</text>
+                <text x="240" y="34" font-size="7" fill="rgba(255,255,255,0.6)" text-anchor="end">21:30</text>
+              </svg>
+              <!-- medicine row -->
+              <div style="display:flex;align-items:center;gap:8px;background:rgba(255,255,255,0.1);border-radius:10px;padding:8px 10px;margin-bottom:10px">
+                <span style="font-size:14px">💊</span>
+                <span style="font-size:11px;color:rgba(255,255,255,0.85);flex:1">布洛芬 · 17:10服用 · 距今4h20m</span>
+                <span style="background:#007AFF;color:#fff;font-size:10px;font-weight:700;padding:3px 8px;border-radius:8px;white-space:nowrap">1h40m后可用</span>
+              </div>
+              <!-- quick actions -->
+              <div style="display:flex;gap:7px">
+                <div style="flex:1;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:8px 4px;text-align:center">
+                  <div style="font-size:18px">🌡️</div>
+                  <div style="font-size:9px;font-weight:600;color:rgba(255,255,255,0.85);margin-top:2px">记体温</div>
+                </div>
+                <div style="flex:1;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:8px 4px;text-align:center">
+                  <div style="font-size:18px">💊</div>
+                  <div style="font-size:9px;font-weight:600;color:rgba(255,255,255,0.85);margin-top:2px">记用药</div>
+                </div>
+                <div style="flex:1;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:8px 4px;text-align:center">
+                  <div style="font-size:18px">📊</div>
+                  <div style="font-size:9px;font-weight:600;color:rgba(255,255,255,0.85);margin-top:2px">查趋势</div>
+                </div>
+              </div>
+            </div>
+            <div style="text-align:center;margin-top:16px">
+              <div style="display:inline-flex;gap:6px;align-items:center;background:rgba(255,255,255,0.1);border-radius:20px;padding:5px 12px">
+                <span style="font-size:10px;color:rgba(255,255,255,0.5)">↑ 向上滑动解锁</span>
+              </div>
+            </div>
+            <div style="position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none"></div>
+            <div class="status-bar" style="position:absolute;top:0;left:0;right:0;padding:14px 24px 0;z-index:5">
+              <span class="time" style="color:#fff;font-weight:700">9:41</span>
+              <div class="status-icons">
+                <svg width="17" height="12" viewBox="0 0 17 12"><rect x="0" y="3" width="3" height="9" rx="1" fill="
