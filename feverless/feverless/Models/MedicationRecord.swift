@@ -3,12 +3,12 @@ import SwiftData
 
 @Model
 final class MedicationRecord {
-    var id: UUID
-    var childId: UUID
-    var typeRaw: String
-    var timestamp: Date
+    var id: UUID = UUID()
+    var childId: UUID = UUID()
+    var typeRaw: String = MedicationType.other.rawValue
+    var timestamp: Date = Date()
     var concurrentTemperature: Double?
-    var notes: String
+    var notes: String = ""
 
     var type: MedicationType {
         get { MedicationType(rawValue: typeRaw) ?? .other }

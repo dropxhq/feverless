@@ -65,16 +65,7 @@ struct ChartView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
-                    if tempRecords.isEmpty {
-                        ContentUnavailableView(
-                            "暂无记录",
-                            systemImage: "chart.line.uptrend.xyaxis",
-                            description: Text("\(timeRange.rawValue)内没有体温记录")
-                        )
-                        .padding(.top, 60)
-                    } else {
-                        chartSection
-                    }
+                    chartSection
 
                     recordsListSection
                 }
@@ -122,6 +113,14 @@ struct ChartView: View {
                 }
             }
 
+            if tempRecords.isEmpty {
+                ContentUnavailableView(
+                    "暂无记录",
+                    systemImage: "chart.line.uptrend.xyaxis",
+                    description: Text("\(timeRange.rawValue)内没有体温记录")
+                )
+                .frame(height: 220)
+            } else {
             Chart {
                 // Normal zone background (below 37°)
                 RectangleMark(
@@ -213,6 +212,7 @@ struct ChartView: View {
                 }
             }
             .frame(height: 220)
+            } // end if tempRecords.isEmpty
 
             // Legend
             HStack(spacing: 16) {

@@ -3,12 +3,12 @@ import SwiftData
 
 @Model
 final class TemperatureRecord {
-    var id: UUID
-    var childId: UUID
-    var value: Double
-    var methodRaw: String
-    var timestamp: Date
-    var notes: String
+    var id: UUID = UUID()
+    var childId: UUID = UUID()
+    var value: Double = 0.0
+    var methodRaw: String = MeasurementMethod.axillary.rawValue
+    var timestamp: Date = Date()
+    var notes: String = ""
 
     var method: MeasurementMethod {
         get { MeasurementMethod(rawValue: methodRaw) ?? .axillary }
