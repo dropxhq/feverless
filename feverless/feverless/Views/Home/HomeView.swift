@@ -48,8 +48,7 @@ struct HomeView: View {
 
     let selectedChild: Child?
     @Binding var selectedChildIdString: String
-    @Binding var showRecordView: Bool
-    @Binding var recordInitialTab: RecordTab
+    @Binding var recordRequest: RecordRequest?
 
     private var childTempRecords: [TemperatureRecord] {
         guard let child = selectedChild else { return [] }
@@ -302,7 +301,7 @@ struct HomeView: View {
 
                     Divider()
                     Text({
-                        var base = AttributedString("距上次服用\(lastMainMed.type.displayName)已过 ")
+                        let base = AttributedString("距上次服用\(lastMainMed.type.displayName)已过 ")
                         var bold = AttributedString(sinceText)
                         bold.swiftUI.font = .system(size: 12, weight: .semibold)
                         return base + bold
@@ -380,8 +379,9 @@ struct HomeView: View {
     private var quickRecordButtons: some View {
         HStack(spacing: 10) {
             Button {
-                recordInitialTab = .temperature
-                showRecordView = true
+                if let child = selectedChild {
+                    recordRequest = RecordRequest(child: child, tab: .temperature)
+                }
             } label: {
                 VStack(spacing: 6) {
                     Text("🌡")
@@ -397,8 +397,9 @@ struct HomeView: View {
             .background(Color.red, in: RoundedRectangle(cornerRadius: 14))
 
             Button {
-                recordInitialTab = .medication
-                showRecordView = true
+                if let child = selectedChild {
+                    recordRequest = RecordRequest(child: child, tab: .medication)
+                }
             } label: {
                 VStack(spacing: 6) {
                     Text("💊")

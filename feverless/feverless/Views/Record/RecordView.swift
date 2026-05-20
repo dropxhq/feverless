@@ -22,8 +22,9 @@ struct RecordView: View {
     @State private var concurrentMed: MedicationType? = nil
     @State private var selectedMedType: MedicationType = .ibuprofen
     @State private var recordTime: Date = Date()
-    @State private var showDatePicker: Bool = false
     @State private var notes: String = ""
+    @State private var isPressing: Bool = false
+    @State private var pressStepCount: Int = 0
 
     init(child: Child, initialTab: RecordTab) {
         self.child = child
@@ -91,7 +92,12 @@ struct RecordView: View {
                         style: StrokeStyle(lineWidth: 8, lineCap: .round)
                     )
                     .rotationEffect(.degrees(-90))
-                    .animation(.spring(duration: 0.3), value: tempRingProgress)
+                    .animation(
+                        isPressing && pressStepCount >= 8
+                            ? .interactiveSpring(duration: 0.1)
+                            : .spring(duration: 0.3),
+                        value: tempRingProgress
+                    )
                 VStack(spacing: 2) {
                     Text(String(format: "%.1f", currentTemp))
                         .font(.system(size: 46, weight: .light))
@@ -111,33 +117,45 @@ struct RecordView: View {
 
             // Stepper
             HStack(spacing: 20) {
-                Button {
-                    adjustTemp(by: -0.1)
-                } label: {
-                    Text("−")
-                        .font(.title)
-                        .frame(width: 44, height: 44)
-                        .background(Color.gray.opacity(0.12), in: RoundedRectangle(cornerRadius: 14))
-                        .foregroundStyle(currentTemp <= 35.0 ? Color.secondary : Color.blue)
-                }
-                .disabled(currentTemp <= 35.0)
-                .buttonStyle(.plain)
+                Text("−")
+                    .font(.title)
+                    .frame(width: 44, height: 44)
+                    .background(Color.gray.opacity(currentTemp <= 35.0 ? 0.08 : 0.12), in: RoundedRectangle(cornerRadius: 14))
+                    .foregroundStyle(currentTemp <= 35.0 ? Color.secondary : Color.blue)
+                    .opacity(currentTemp <= 35.0 ? 0.5 : 1.0)
+                    .contentShape(RoundedRectangle(cornerRadius: 14))
+                    .gesture(
+                        DragGesture(minimumDistance: 0)
+                            .onChanged { _ in
+                                if !isPressing {
+                                    isPressing = true
+                                    startRepeating(delta: -0.1)
+                                }
+                            }
+                            .onEnded { _ in stopRepeating() }
+                    )
 
                 Text("0.1°C 微调")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                Button {
-                    adjustTemp(by: 0.1)
-                } label: {
-                    Text("+")
-                        .font(.title)
-                        .frame(width: 44, height: 44)
-                        .background(Color.gray.opacity(0.12), in: RoundedRectangle(cornerRadius: 14))
-                        .foregroundStyle(currentTemp >= 42.9 ? Color.secondary : Color.blue)
-                }
-                .disabled(currentTemp >= 42.9)
-                .buttonStyle(.plain)
+                Text("+")
+                    .font(.title)
+                    .frame(width: 44, height: 44)
+                    .background(Color.gray.opacity(currentTemp >= 42.9 ? 0.08 : 0.12), in: RoundedRectangle(cornerRadius: 14))
+                    .foregroundStyle(currentTemp >= 42.9 ? Color.secondary : Color.blue)
+                    .opacity(currentTemp >= 42.9 ? 0.5 : 1.0)
+                    .contentShape(RoundedRectangle(cornerRadius: 14))
+                    .gesture(
+                        DragGesture(minimumDistance: 0)
+                            .onChanged { _ in
+                                if !isPressing {
+                                    isPressing = true
+                                    startRepeating(delta: 0.1)
+                                }
+                            }
+                            .onEnded { _ in stopRepeating() }
+                    )
             }
 
             Divider().padding(.horizontal)
@@ -313,29 +331,16 @@ struct RecordView: View {
     @ViewBuilder
     private var timeSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("记录时间")
-                    .font(.headline)
-                Spacer()
-                Button(showDatePicker ? "完成" : "修改") {
-                    showDatePicker.toggle()
-                }
-                .font(.subheadline)
-            }
-
-            if showDatePicker {
-                DatePicker(
-                    "时间",
-                    selection: $recordTime,
-                    in: ...Date(),
-                    displayedComponents: [.date, .hourAndMinute]
-                )
-                .datePickerStyle(.graphical)
-                .labelsHidden()
-            } else {
-                Text(recordTime.formatted(date: .abbreviated, time: .shortened))
-                    .foregroundStyle(.secondary)
-            }
+            Text("记录时间")
+                .font(.headline)
+            DatePicker(
+                "记录时间",
+                selection: $recordTime,
+                in: ...Date(),
+                displayedComponents: [.date, .hourAndMinute]
+            )
+            .datePickerStyle(.compact)
+            .labelsHidden()
         }
         .padding(.horizontal)
     }
@@ -358,8 +363,34 @@ struct RecordView: View {
         let raw = currentTemp + delta
         let rounded = (raw * 10).rounded() / 10
         let clamped = max(35.0, min(42.9, rounded))
+        if clamped <= 35.0 || clamped >= 42.9 {
+            isPressing = false
+        }
         tempInteger = Int(clamped)
         tempDecimal = Int(round((clamped - Double(Int(clamped))) * 10))
+    }
+
+    private func startRepeating(delta: Double) {
+        adjustTemp(by: delta)
+        pressStepCount += 1
+        guard isPressing else { return }
+        let interval: Double
+        if pressStepCount < 3 {
+            interval = 0.35
+        } else if pressStepCount < 8 {
+            interval = 0.15
+        } else {
+            interval = 0.08
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + interval) {
+            guard isPressing else { return }
+            startRepeating(delta: delta)
+        }
+    }
+
+    private func stopRepeating() {
+        isPressing = false
+        pressStepCount = 0
     }
 
     private func save() {
