@@ -1,0 +1,44 @@
+//
+//  FeverEpisodeDetector.swift
+//  feverless
+//
+
+import Foundation
+
+struct FeverEpisode {
+    let startDate: Date
+    let isOngoing: Bool
+
+    var duration: TimeInterval {
+        Date().timeIntervalSince(startDate)
+    }
+
+    var durationString: String {
+        let total = Int(duration)
+        let hours = total / 3600
+        let minutes = (total % 3600) / 60
+        if hours > 0 {
+            return "\(hours)h \(minutes)m"
+        } else {
+            return "\(minutes)m"
+        }
+    }
+}
+
+struct FeverEpisodeDetector {
+    /// Returns the current (ongoing) fever episode for the given records,
+    /// or nil if no active episode exists.
+    static func currentEpisode(for records: [TemperatureRecord]) -> FeverEpisode? {
+        let feverRecords = records
+            .filter { $0.isFever }
+            .sorted { $0.timestamp < $1.timestamp }
+
+        guard let lastFever = feverRecords.last else { return nil }
+
+        // Episode ends if the last fever record is older than 24 hours
+        let isOngoing = Date().timeIntervalSince(lastFever.timestamp) < 24 * 3600
+        guard isOngoing, let firstFever = feverRecords.first else { return nil }
+
+        return FeverEpisode(startDate: firstFever.timestamp, isOngoing: true)
+    }
+}
