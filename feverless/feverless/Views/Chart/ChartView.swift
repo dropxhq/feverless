@@ -92,12 +92,17 @@ struct ChartView: View {
             // Header with range selector
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("体温趋势")
-                        .font(.system(size: 13, weight: .semibold))
+                    Text("本次发烧")
+                        .font(.system(size: 15, weight: .bold))
                     if let first = tempRecords.first {
-                        Text(first.timestamp.formatted(date: .abbreviated, time: .omitted) + " 起")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
+                        Text(
+                            first.timestamp.formatted(date: .abbreviated, time: .omitted)
+                            + " "
+                            + first.timestamp.formatted(date: .omitted, time: .shortened)
+                            + " 起"
+                        )
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
                     }
                 }
                 Spacer()
@@ -118,56 +123,127 @@ struct ChartView: View {
             }
 
             Chart {
-            ForEach(tempRecords, id: \.id) { record in
-                LineMark(
-                    x: .value("时间",  record.timestamp),
-                    y: .value("体温", record.value)
+                // Normal zone background (below 37°)
+                RectangleMark(
+                    yStart: .value("lo", yDomain.lowerBound),
+                    yEnd: .value("hi", 37.0)
                 )
-                .foregroundStyle(.orange)
-                .interpolationMethod(.catmullRom)
+                .foregroundStyle(Color.green.opacity(0.07))
 
-                PointMark(
-                    x: .value("时间",  record.timestamp),
-                    y: .value("体温", record.value)
-                )
-                .foregroundStyle(record.isFever ? Color.red : Color.orange)
-                .symbolSize(40)
-            }
+                // Temperature area fill + line + labeled points
+                ForEach(tempRecords, id: \.id) { record in
+                    AreaMark(
+                        x: .value("时间", record.timestamp),
+                        yStart: .value("底", yDomain.lowerBound),
+                        yEnd: .value("体温", record.value)
+                    )
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [Color.red.opacity(0.25), Color.red.opacity(0.04)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .interpolationMethod(.catmullRom)
 
-            // 37.0°C normal reference line
-            RuleMark(y: .value("正常", 37.0))
-                .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
-                .foregroundStyle(Color.secondary.opacity(0.5))
-                .annotation(position: .leading, alignment: .center) {
-                    Text("37°C")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                    LineMark(
+                        x: .value("时间", record.timestamp),
+                        y: .value("体温", record.value)
+                    )
+                    .foregroundStyle(Color.red)
+                    .lineStyle(StrokeStyle(lineWidth: 2))
+                    .interpolationMethod(.catmullRom)
+
+                    PointMark(
+                        x: .value("时间", record.timestamp),
+                        y: .value("体温", record.value)
+                    )
+                    .foregroundStyle(Color.red)
+                    .symbolSize(50)
+                    .annotation(position: .top, spacing: 4) {
+                        Text(String(format: "%.1f", record.value))
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(record.isFever ? Color.red : Color.secondary)
+                    }
                 }
 
-            // Medication time markers
-            ForEach(medRecords, id: \.id) { record in
-                RuleMark(x: .value("用药", record.timestamp))
-                    .lineStyle(StrokeStyle(lineWidth: 2))
-                    .foregroundStyle(record.type.color.opacity(0.7))
-                    .annotation(position: .top) {
-                        Text(record.type.emoji)
+                // 38.5°C fever threshold line
+                RuleMark(y: .value("发烧", 38.5))
+                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                    .foregroundStyle(Color.red.opacity(0.55))
+                    .annotation(position: .leading, alignment: .center) {
+                        Text("38.5°")
                             .font(.caption2)
+                            .foregroundStyle(Color.red.opacity(0.8))
                     }
+
+                // 37.0°C normal reference line
+                RuleMark(y: .value("正常", 37.0))
+                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                    .foregroundStyle(Color.teal.opacity(0.5))
+                    .annotation(position: .leading, alignment: .center) {
+                        Text("37°")
+                            .font(.caption2)
+                            .foregroundStyle(Color.teal.opacity(0.8))
+                    }
+
+                // Medication time markers
+                ForEach(medRecords, id: \.id) { record in
+                    RuleMark(x: .value("用药", record.timestamp))
+                        .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [3, 3]))
+                        .foregroundStyle(record.type.color.opacity(0.6))
+                        .annotation(position: .top, spacing: 4) {
+                            HStack(spacing: 2) {
+                                Text(record.type.emoji).font(.system(size: 8))
+                                Text(record.type.displayName)
+                                    .font(.system(size: 8, weight: .semibold))
+                                    .foregroundStyle(record.type.color)
+                            }
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 2)
+                            .background(Capsule().fill(record.type.color.opacity(0.15)))
+                        }
+                }
+            }
+            .chartYScale(domain: yDomain)
+            .chartXAxis {
+                AxisMarks(values: .automatic(desiredCount: 5)) { _ in
+                    AxisGridLine()
+                    AxisValueLabel(format: .dateTime.hour().minute())
+                }
+            }
+            .frame(height: 220)
+
+            // Legend
+            HStack(spacing: 16) {
+                HStack(spacing: 4) {
+                    Circle().fill(Color.red).frame(width: 7, height: 7)
+                    Text("体温").font(.system(size: 10)).foregroundStyle(.secondary)
+                }
+                if medRecords.contains(where: { $0.type == .ibuprofen }) {
+                    HStack(spacing: 4) {
+                        Rectangle().fill(Color.yellow).frame(width: 14, height: 2)
+                        Text("布洛芬").font(.system(size: 10)).foregroundStyle(.secondary)
+                    }
+                }
+                if medRecords.contains(where: { $0.type == .acetaminophen }) {
+                    HStack(spacing: 4) {
+                        Rectangle().fill(Color.blue).frame(width: 14, height: 2)
+                        Text("对乙酰氨基酚").font(.system(size: 10)).foregroundStyle(.secondary)
+                    }
+                }
+                HStack(spacing: 4) {
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(Color.green.opacity(0.2))
+                        .frame(width: 14, height: 9)
+                    Text("正常区间").font(.system(size: 10)).foregroundStyle(.secondary)
+                }
             }
         }
-        .chartYScale(domain: yDomain)
-        .chartXAxis {
-            AxisMarks(values: .automatic(desiredCount: 5)) { _ in
-                AxisGridLine()
-                AxisValueLabel(format: .dateTime.hour().minute())
-            }
-        }
-        .frame(height: 220)
+        .padding()
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .padding(.horizontal)
     }
-    .padding()
-    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
-    .padding(.horizontal)
-}
 
     private var yDomain: ClosedRange<Double> {
         let vals = tempRecords.map { $0.value }

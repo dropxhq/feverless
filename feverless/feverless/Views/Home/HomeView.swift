@@ -107,6 +107,7 @@ struct HomeView: View {
                 }
             }
             .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     childPicker
@@ -300,10 +301,12 @@ struct HomeView: View {
                     let sinceText = hours > 0 ? "\(hours) 小时 \(minutes) 分" : "\(minutes) 分"
 
                     Divider()
-                    Group {
-                        Text("距上次服用\(lastMainMed.type.displayName)已过 ")
-                            + Text(sinceText).fontWeight(.semibold)
-                    }
+                    Text({
+                        var base = AttributedString("距上次服用\(lastMainMed.type.displayName)已过 ")
+                        var bold = AttributedString(sinceText)
+                        bold.swiftUI.font = .system(size: 12, weight: .semibold)
+                        return base + bold
+                    }())
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity)
