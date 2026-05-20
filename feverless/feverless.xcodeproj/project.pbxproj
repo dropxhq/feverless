@@ -6,11 +6,51 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		503A4F1E2FBD3A1600516FC5 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 503A4F1D2FBD3A1600516FC5 /* WidgetKit.framework */; };
+		503A4F202FBD3A1600516FC5 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 503A4F1F2FBD3A1600516FC5 /* SwiftUI.framework */; };
+		503A4F2D2FBD3A1900516FC5 /* feverlessWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 503A4F1B2FBD3A1600516FC5 /* feverlessWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		503A4F2B2FBD3A1900516FC5 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 50B398B32FB2284E005F9805 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 503A4F1A2FBD3A1600516FC5;
+			remoteInfo = feverlessWidgetExtension;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		503A4F2E2FBD3A1900516FC5 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				503A4F2D2FBD3A1900516FC5 /* feverlessWidgetExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		503A4F1B2FBD3A1600516FC5 /* feverlessWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = feverlessWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		503A4F1D2FBD3A1600516FC5 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = /System/Library/Frameworks/WidgetKit.framework; sourceTree = "<absolute>"; };
+		503A4F1F2FBD3A1600516FC5 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = /System/Library/Frameworks/SwiftUI.framework; sourceTree = "<absolute>"; };
 		50B398BB2FB2284E005F9805 /* feverless.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = feverless.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		503A4F322FBD3A1900516FC5 /* Exceptions for "feverlessWidget" folder in "feverlessWidgetExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 503A4F1A2FBD3A1600516FC5 /* feverlessWidgetExtension */;
+		};
 		50B398C82FB22850005F9805 /* Exceptions for "feverless" folder in "feverless" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -21,6 +61,14 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		503A4F212FBD3A1600516FC5 /* feverlessWidget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				503A4F322FBD3A1900516FC5 /* Exceptions for "feverlessWidget" folder in "feverlessWidgetExtension" target */,
+			);
+			path = feverlessWidget;
+			sourceTree = "<group>";
+		};
 		50B398BD2FB2284E005F9805 /* feverless */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -32,6 +80,15 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		503A4F182FBD3A1600516FC5 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				503A4F202FBD3A1600516FC5 /* SwiftUI.framework in Frameworks */,
+				503A4F1E2FBD3A1600516FC5 /* WidgetKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		50B398B82FB2284E005F9805 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -42,10 +99,21 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		503A4F1C2FBD3A1600516FC5 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				503A4F1D2FBD3A1600516FC5 /* WidgetKit.framework */,
+				503A4F1F2FBD3A1600516FC5 /* SwiftUI.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		50B398B22FB2284E005F9805 = {
 			isa = PBXGroup;
 			children = (
 				50B398BD2FB2284E005F9805 /* feverless */,
+				503A4F212FBD3A1600516FC5 /* feverlessWidget */,
+				503A4F1C2FBD3A1600516FC5 /* Frameworks */,
 				50B398BC2FB2284E005F9805 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -54,6 +122,7 @@
 			isa = PBXGroup;
 			children = (
 				50B398BB2FB2284E005F9805 /* feverless.app */,
+				503A4F1B2FBD3A1600516FC5 /* feverlessWidgetExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -61,6 +130,28 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		503A4F1A2FBD3A1600516FC5 /* feverlessWidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 503A4F312FBD3A1900516FC5 /* Build configuration list for PBXNativeTarget "feverlessWidgetExtension" */;
+			buildPhases = (
+				503A4F172FBD3A1600516FC5 /* Sources */,
+				503A4F182FBD3A1600516FC5 /* Frameworks */,
+				503A4F192FBD3A1600516FC5 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				503A4F212FBD3A1600516FC5 /* feverlessWidget */,
+			);
+			name = feverlessWidgetExtension;
+			packageProductDependencies = (
+			);
+			productName = feverlessWidgetExtension;
+			productReference = 503A4F1B2FBD3A1600516FC5 /* feverlessWidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		50B398BA2FB2284E005F9805 /* feverless */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 50B398C92FB22850005F9805 /* Build configuration list for PBXNativeTarget "feverless" */;
@@ -68,10 +159,12 @@
 				50B398B72FB2284E005F9805 /* Sources */,
 				50B398B82FB2284E005F9805 /* Frameworks */,
 				50B398B92FB2284E005F9805 /* Resources */,
+				503A4F2E2FBD3A1900516FC5 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				503A4F2C2FBD3A1900516FC5 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				50B398BD2FB2284E005F9805 /* feverless */,
@@ -90,9 +183,12 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 2640;
+				LastSwiftUpdateCheck = 2650;
 				LastUpgradeCheck = 2640;
 				TargetAttributes = {
+					503A4F1A2FBD3A1600516FC5 = {
+						CreatedOnToolsVersion = 26.5;
+					};
 					50B398BA2FB2284E005F9805 = {
 						CreatedOnToolsVersion = 26.4.1;
 					};
@@ -113,11 +209,19 @@
 			projectRoot = "";
 			targets = (
 				50B398BA2FB2284E005F9805 /* feverless */,
+				503A4F1A2FBD3A1600516FC5 /* feverlessWidgetExtension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		503A4F192FBD3A1600516FC5 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		50B398B92FB2284E005F9805 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -128,6 +232,13 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		503A4F172FBD3A1600516FC5 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		50B398B72FB2284E005F9805 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -137,7 +248,99 @@
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		503A4F2C2FBD3A1900516FC5 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 503A4F1A2FBD3A1600516FC5 /* feverlessWidgetExtension */;
+			targetProxy = 503A4F2B2FBD3A1900516FC5 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
+		503A4F2F2FBD3A1900516FC5 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = BKV2NSQ2P2;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = feverlessWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = feverlessWidget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.3;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = top.dropx.feverless.feverlessWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2,7";
+				XROS_DEPLOYMENT_TARGET = 26.5;
+			};
+			name = Debug;
+		};
+		503A4F302FBD3A1900516FC5 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = BKV2NSQ2P2;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = feverlessWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = feverlessWidget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.3;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = top.dropx.feverless.feverlessWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2,7";
+				XROS_DEPLOYMENT_TARGET = 26.5;
+			};
+			name = Release;
+		};
 		50B398CA2FB22850005F9805 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -347,6 +550,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		503A4F312FBD3A1900516FC5 /* Build configuration list for PBXNativeTarget "feverlessWidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				503A4F2F2FBD3A1900516FC5 /* Debug */,
+				503A4F302FBD3A1900516FC5 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		50B398B62FB2284E005F9805 /* Build configuration list for PBXProject "feverless" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
