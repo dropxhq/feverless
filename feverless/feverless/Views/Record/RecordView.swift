@@ -35,6 +35,11 @@ struct RecordView: View {
         Double(tempInteger) + Double(tempDecimal) / 10.0
     }
 
+    private var tempRingProgress: Double {
+        let minTemp = 35.0, maxTemp = 42.9
+        return max(0, min(1, (currentTemp - minTemp) / (maxTemp - minTemp)))
+    }
+
     private var childMedRecords: [MedicationRecord] {
         allMedRecords.filter { $0.childId == child.id }
     }
@@ -66,10 +71,6 @@ struct RecordView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("取消") { dismiss() }
                 }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("保存") { save() }
-                        .fontWeight(.semibold)
-                }
             }
         }
     }
@@ -79,113 +80,159 @@ struct RecordView: View {
     @ViewBuilder
     private var temperatureTab: some View {
         VStack(spacing: 20) {
-            // Large temperature preview
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text(String(format: "%.1f", currentTemp))
-                    .font(.system(size: 64, weight: .bold, design: .rounded))
-                    .foregroundStyle(isTempFever ? .red : .primary)
-                Text("°C")
-                    .font(.title)
-                    .foregroundStyle(.secondary)
+            // Temperature ring
+            ZStack {
+                Circle()
+                    .stroke(Color.gray.opacity(0.1), lineWidth: 8)
+                Circle()
+                    .trim(from: 0, to: tempRingProgress)
+                    .stroke(
+                        isTempFever ? Color.red : Color.orange,
+                        style: StrokeStyle(lineWidth: 8, lineCap: .round)
+                    )
+                    .rotationEffect(.degrees(-90))
+                    .animation(.spring(duration: 0.3), value: tempRingProgress)
+                VStack(spacing: 2) {
+                    Text(String(format: "%.1f", currentTemp))
+                        .font(.system(size: 46, weight: .light))
+                        .foregroundStyle(isTempFever ? Color.red : Color.primary)
+                        .monospacedDigit()
+                        .contentTransition(.numericText())
+                    Text("°C")
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
+                    Text("点击 ±0.1 微调")
+                        .font(.caption2)
+                        .foregroundStyle(.quaternary)
+                }
             }
+            .frame(width: 180, height: 180)
             .padding(.top, 8)
 
-            // Dual wheel pickers
-            HStack(spacing: 0) {
-                Picker("整数", selection: $tempInteger) {
-                    ForEach(35...42, id: \.self) { i in
-                        Text("\(i)").tag(i)
-                    }
-                }
-#if os(iOS)
-                .pickerStyle(.wheel)
-#endif
-                .frame(width: 80)
-
-                Text(".")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
-                    .padding(.bottom, 8)
-
-                Picker("小数", selection: $tempDecimal) {
-                    ForEach(0...9, id: \.self) { d in
-                        Text("\(d)").tag(d)
-                    }
-                }
-#if os(iOS)
-                .pickerStyle(.wheel)
-#endif
-                .frame(width: 80)
-
-                Text("°C")
-                    .font(.title2)
-                    .foregroundStyle(.secondary)
-                    .padding(.leading, 8)
-            }
-            .frame(height: 160)
-
-            // Fine-adjust ±0.1°C buttons
-            HStack(spacing: 32) {
+            // Stepper
+            HStack(spacing: 20) {
                 Button {
                     adjustTemp(by: -0.1)
                 } label: {
-                    Image(systemName: "minus.circle.fill")
+                    Text("−")
                         .font(.title)
+                        .frame(width: 44, height: 44)
+                        .background(Color.gray.opacity(0.12), in: RoundedRectangle(cornerRadius: 14))
+                        .foregroundStyle(currentTemp <= 35.0 ? Color.secondary : Color.blue)
                 }
                 .disabled(currentTemp <= 35.0)
+                .buttonStyle(.plain)
+
+                Text("0.1°C 微调")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
 
                 Button {
                     adjustTemp(by: 0.1)
                 } label: {
-                    Image(systemName: "plus.circle.fill")
+                    Text("+")
                         .font(.title)
+                        .frame(width: 44, height: 44)
+                        .background(Color.gray.opacity(0.12), in: RoundedRectangle(cornerRadius: 14))
+                        .foregroundStyle(currentTemp >= 42.9 ? Color.secondary : Color.blue)
                 }
                 .disabled(currentTemp >= 42.9)
+                .buttonStyle(.plain)
             }
-            .foregroundStyle(.orange)
 
-            // Measurement method chips
+            Divider().padding(.horizontal)
+
+            // Measurement method
             VStack(alignment: .leading, spacing: 8) {
                 Text("测量方式")
-                    .font(.headline)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal)
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
                         ForEach(MeasurementMethod.allCases, id: \.self) { method in
                             Button(method.displayName) {
                                 selectedMethod = method
                             }
-                            .buttonStyle(.bordered)
-                            .tint(selectedMethod == method ? .orange : .gray)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(selectedMethod == method ? Color.blue : Color.primary.opacity(0.7))
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .background(
+                                RoundedRectangle(cornerRadius: 20)
+                                    .fill(selectedMethod == method ? Color.blue.opacity(0.08) : Color.gray.opacity(0.1))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 20)
+                                            .strokeBorder(
+                                                selectedMethod == method ? Color.blue.opacity(0.3) : Color.clear,
+                                                lineWidth: 1.5
+                                            )
+                                    )
+                            )
+                            .buttonStyle(.plain)
                         }
                     }
-                    .padding(.horizontal, 1)
+                    .padding(.horizontal)
                 }
             }
-            .padding(.horizontal)
 
-            // Concurrent medication option
+            // Concurrent medication
             VStack(alignment: .leading, spacing: 8) {
                 Text("同时记录用药")
-                    .font(.headline)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal)
                 concurrentMedPicker
             }
-            .padding(.horizontal)
 
             timeSection
             notesSection
+
+            // Save button
+            Button("保存记录") { save() }
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 15)
+                .background(Color.blue, in: RoundedRectangle(cornerRadius: 14))
+                .buttonStyle(.plain)
+                .padding(.horizontal)
+                .padding(.top, 4)
         }
         .padding(.bottom, 32)
     }
 
     @ViewBuilder
     private var concurrentMedPicker: some View {
-        Picker("用药", selection: $concurrentMed) {
-            Text("无").tag(Optional<MedicationType>.none)
-            Text(MedicationType.ibuprofen.displayName).tag(Optional(MedicationType.ibuprofen))
-            Text(MedicationType.acetaminophen.displayName).tag(Optional(MedicationType.acetaminophen))
-            Text(MedicationType.other.displayName).tag(Optional(MedicationType.other))
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                medChip(label: "无", isSelected: concurrentMed == nil)  { concurrentMed = nil }
+                medChip(label: MedicationType.ibuprofen.emoji + " " + MedicationType.ibuprofen.displayName,
+                        isSelected: concurrentMed == .ibuprofen)           { concurrentMed = .ibuprofen }
+                medChip(label: MedicationType.acetaminophen.emoji + " " + MedicationType.acetaminophen.displayName,
+                        isSelected: concurrentMed == .acetaminophen)       { concurrentMed = .acetaminophen }
+                medChip(label: MedicationType.other.emoji + " " + MedicationType.other.displayName,
+                        isSelected: concurrentMed == .other)               { concurrentMed = .other }
+            }
+            .padding(.horizontal)
         }
-        .pickerStyle(.segmented)
+    }
+
+    private func medChip(label: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
+        Button(label, action: action)
+            .font(.system(size: 13, weight: .medium))
+            .foregroundStyle(isSelected ? Color.blue : Color.primary.opacity(0.7))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(isSelected ? Color.blue.opacity(0.08) : Color.gray.opacity(0.1))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20)
+                            .strokeBorder(isSelected ? Color.blue.opacity(0.3) : Color.clear, lineWidth: 1.5)
+                    )
+            )
+            .buttonStyle(.plain)
     }
 
     // MARK: Medication Tab
@@ -205,6 +252,16 @@ struct RecordView: View {
 
             timeSection
             notesSection
+
+            Button("保存记录") { save() }
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 15)
+                .background(Color.blue, in: RoundedRectangle(cornerRadius: 14))
+                .buttonStyle(.plain)
+                .padding(.horizontal)
+                .padding(.top, 4)
         }
         .padding(.bottom, 32)
     }

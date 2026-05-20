@@ -65,14 +65,6 @@ struct ChartView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
-                    Picker("时间范围", selection: $timeRange) {
-                        ForEach(ChartTimeRange.allCases, id: \.self) { r in
-                            Text(r.rawValue).tag(r)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .padding(.horizontal)
-
                     if tempRecords.isEmpty {
                         ContentUnavailableView(
                             "暂无记录",
@@ -96,7 +88,36 @@ struct ChartView: View {
 
     @ViewBuilder
     private var chartSection: some View {
-        Chart {
+        VStack(alignment: .leading, spacing: 14) {
+            // Header with range selector
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("体温趋势")
+                        .font(.system(size: 13, weight: .semibold))
+                    if let first = tempRecords.first {
+                        Text(first.timestamp.formatted(date: .abbreviated, time: .omitted) + " 起")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Spacer()
+                HStack(spacing: 4) {
+                    ForEach(ChartTimeRange.allCases, id: \.self) { r in
+                        Button(r.rawValue) { timeRange = r }
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(timeRange == r ? .white : Color.secondary)
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 4)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(timeRange == r ? Color.blue : Color.gray.opacity(0.1))
+                            )
+                            .buttonStyle(.plain)
+                    }
+                }
+            }
+
+            Chart {
             ForEach(tempRecords, id: \.id) { record in
                 LineMark(
                     x: .value("时间",  record.timestamp),
@@ -142,10 +163,11 @@ struct ChartView: View {
             }
         }
         .frame(height: 220)
-        .padding()
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
-        .padding(.horizontal)
     }
+    .padding()
+    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+    .padding(.horizontal)
+}
 
     private var yDomain: ClosedRange<Double> {
         let vals = tempRecords.map { $0.value }
@@ -162,7 +184,8 @@ struct ChartView: View {
         if !items.isEmpty {
             VStack(alignment: .leading, spacing: 0) {
                 Text("记录明细")
-                    .font(.headline)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.secondary)
                     .padding(.horizontal)
                     .padding(.vertical, 12)
 
@@ -170,38 +193,48 @@ struct ChartView: View {
                     HStack(spacing: 12) {
                         switch item {
                         case .temperature(let r):
-                            Image(systemName: "thermometer.medium")
-                                .foregroundStyle(.orange)
-                                .frame(width: 24)
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(r.isFever ? Color.red.opacity(0.08) : Color.green.opacity(0.1))
+                                .frame(width: 34, height: 34)
+                                .overlay(
+                                    Image(systemName: "thermometer.medium")
+                                        .font(.system(size: 14))
+                                        .foregroundStyle(r.isFever ? Color.red : Color.green)
+                                )
                             VStack(alignment: .leading, spacing: 2) {
                                 HStack(spacing: 4) {
                                     Text(String(format: "%.1f°C", r.value))
-                                        .fontWeight(.medium)
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundStyle(r.isFever ? Color.red : Color.primary)
                                     Text("· " + r.method.displayName)
+                                        .font(.caption)
                                         .foregroundStyle(.secondary)
                                     if r.isFever {
-                                        Text("发烧")
-                                            .font(.caption2)
-                                            .padding(.horizontal, 6).padding(.vertical, 1)
-                                            .background(Color.red.opacity(0.15))
-                                            .foregroundStyle(.red)
-                                            .clipShape(Capsule())
+                                        Text(r.value >= 39.0 ? "高烧" : "发烧")
+                                            .font(.system(size: 11, weight: .semibold))
+                                            .foregroundStyle(Color.red)
+                                            .padding(.horizontal, 7)
+                                            .padding(.vertical, 2)
+                                            .background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
                                     }
                                 }
-                                .font(.subheadline)
                                 Text(r.timestamp.formatted(date: .abbreviated, time: .shortened))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
 
                         case .medication(let r):
-                            Image(systemName: "pill.fill")
-                                .foregroundStyle(r.type.color)
-                                .frame(width: 24)
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(r.type == .ibuprofen ? Color.yellow.opacity(0.12) : Color.blue.opacity(0.08))
+                                .frame(width: 34, height: 34)
+                                .overlay(
+                                    Image(systemName: "pill.fill")
+                                        .font(.system(size: 14))
+                                        .foregroundStyle(r.type.color)
+                                )
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(r.type.displayName)
-                                    .font(.subheadline)
-                                    .fontWeight(.medium)
+                                    .font(.system(size: 14, weight: .semibold))
                                 Text(r.timestamp.formatted(date: .abbreviated, time: .shortened))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
@@ -213,7 +246,7 @@ struct ChartView: View {
                     .padding(.horizontal)
 
                     if index < items.count - 1 {
-                        Divider().padding(.leading, 52)
+                        Divider().padding(.leading, 62)
                     }
                 }
             }
