@@ -342,6 +342,9 @@ struct RecordView: View {
             )
             .datePickerStyle(.compact)
             .labelsHidden()
+            .font(.system(size: 13, weight: .medium))
+            .foregroundStyle(Color.primary.opacity(0.7))
+            .scaleEffect(0.8, anchor: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal)
@@ -351,7 +354,8 @@ struct RecordView: View {
     private var notesSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("备注")
-                .font(.headline)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.secondary)
             TextField("可选备注…", text: $notes, axis: .vertical)
                 .textFieldStyle(.roundedBorder)
                 .lineLimit(3, reservesSpace: true)
