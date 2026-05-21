@@ -332,7 +332,8 @@ struct RecordView: View {
     private var timeSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("记录时间")
-                .font(.headline)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.secondary)
             DatePicker(
                 "记录时间",
                 selection: $recordTime,
@@ -341,6 +342,7 @@ struct RecordView: View {
             )
             .datePickerStyle(.compact)
             .labelsHidden()
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal)
     }
