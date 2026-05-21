@@ -260,7 +260,8 @@ struct RecordView: View {
         VStack(spacing: 20) {
             VStack(alignment: .leading, spacing: 8) {
                 Text("药物类型")
-                    .font(.headline)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.secondary)
                     .padding(.horizontal)
 
                 medicationTypeRow(.ibuprofen)
@@ -295,7 +296,7 @@ struct RecordView: View {
             } label: {
                 HStack {
                     Text(med.emoji + " " + med.displayName)
-                        .fontWeight(.medium)
+                        .font(.system(size: 13, weight: .medium))
                     Spacer()
                     Text(avail.displayText)
                         .font(.caption)
