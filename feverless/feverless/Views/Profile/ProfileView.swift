@@ -5,20 +5,44 @@
 
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
 
 // MARK: - ProfileView
 
 struct ProfileView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Child.createdAt) private var children: [Child]
+    @Query(sort: \TemperatureRecord.timestamp, order: .reverse) private var allTempRecords: [TemperatureRecord]
+    @Query(sort: \MedicationRecord.timestamp,  order: .reverse) private var allMedRecords:  [MedicationRecord]
 
     @Binding var selectedChildIdString: String
     @State private var showAddChild = false
     @State private var childToEdit: Child?
 
+    // 5.4 / 5.5 Export / Import state
+    @State private var childForExport: Child?
+    @State private var showFileImporter = false
+
+    // 4.3 Import error alert
+    @State private var importError: String?
+    @State private var showImportError = false
+
+    // 4.4 Import preview sheet
+    @State private var importPreviewResult: CSVParseResult?
+    @State private var showImportPreview = false
+
+    // 4.7 Success toast
+    @State private var toastMessage: String?
+
+    private var selectedChild: Child? {
+        guard let id = UUID(uuidString: selectedChildIdString) else { return nil }
+        return children.first { $0.id == id }
+    }
+
     var body: some View {
         NavigationStack {
             List {
+                // Children list
                 ForEach(children) { child in
                     childRow(child)
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
@@ -36,6 +60,27 @@ struct ProfileView: View {
                             .tint(.blue)
                         }
                 }
+
+                // 5.3 / 5.6 Data management section (hidden when no selected child)
+                if let child = selectedChild {
+                    Section("\(child.name) 的数据") {
+                        // 5.4 Export row
+                        Button {
+                            childForExport = child
+                        } label: {
+                            Label("导出数据...", systemImage: "square.and.arrow.up")
+                        }
+                        .foregroundStyle(.primary)
+
+                        // 5.5 Import row
+                        Button {
+                            showFileImporter = true
+                        } label: {
+                            Label("导入数据...", systemImage: "square.and.arrow.down")
+                        }
+                        .foregroundStyle(.primary)
+                    }
+                }
             }
             .navigationTitle("我的")
             .toolbar {
@@ -47,14 +92,54 @@ struct ProfileView: View {
                     }
                 }
             }
+            // 4.7 Toast overlay
+            .overlay(alignment: .bottom) {
+                if let msg = toastMessage {
+                    Text(msg)
+                        .font(.subheadline)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(.regularMaterial, in: Capsule())
+                        .padding(.bottom, 20)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .animation(.easeInOut(duration: 0.3), value: toastMessage)
             .sheet(isPresented: $showAddChild) {
                 AddChildView(onSave: nil)
             }
             .sheet(item: $childToEdit) { child in
                 EditChildView(child: child)
             }
+            // 3.1 Export sheet
+            .sheet(item: $childForExport) { child in
+                ExportSheet(child: child)
+            }
+            // 4.4 Import preview sheet
+            .sheet(isPresented: $showImportPreview) {
+                if let result = importPreviewResult {
+                    ImportPreviewSheet(parseResult: result) { count in
+                        showToast("已成功导入 \(count) 条记录")
+                    }
+                }
+            }
+            // 4.2 File importer
+            .fileImporter(
+                isPresented: $showFileImporter,
+                allowedContentTypes: [.commaSeparatedText]
+            ) { result in
+                handleFileImport(result: result)
+            }
+            // 4.3 Import error alert
+            .alert("导入失败", isPresented: $showImportError) {
+                Button("好") {}
+            } message: {
+                Text(importError ?? "未知错误")
+            }
         }
     }
+
+    // MARK: - 5.1 Card-style child row
 
     @ViewBuilder
     private func childRow(_ child: Child) -> some View {
@@ -64,13 +149,13 @@ struct ProfileView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(child.name)
                     .font(.headline)
-                if let dob = child.birthDate {
-                    Text(dob.formatted(date: .abbreviated, time: .omitted))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                // 5.1 Latest temperature subtitle
+                Text(latestTempSubtitle(for: child))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             Spacer()
+            // 5.2 Selected child highlight
             if selectedChildIdString == child.id.uuidString {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(.blue)
@@ -81,6 +166,81 @@ struct ProfileView: View {
             selectedChildIdString = child.id.uuidString
         }
     }
+
+    // MARK: - Latest temp helpers
+
+    private func latestTempSubtitle(for child: Child) -> String {
+        guard let record = allTempRecords.first(where: { $0.childId == child.id }) else {
+            return "暂无体温记录"
+        }
+        return "最近体温: \(String(format: "%.1f", record.value))°C · \(relativeTimeString(record.timestamp))"
+    }
+
+    private func relativeTimeString(_ date: Date) -> String {
+        let cal = Calendar.current
+        let timeFmt = DateFormatter()
+        timeFmt.dateFormat = "HH:mm"
+        if cal.isDateInToday(date) {
+            return "今天 \(timeFmt.string(from: date))"
+        } else if cal.isDateInYesterday(date) {
+            return "昨天 \(timeFmt.string(from: date))"
+        } else {
+            let dateFmt = DateFormatter()
+            dateFmt.dateFormat = "M月d日 HH:mm"
+            return dateFmt.string(from: date)
+        }
+    }
+
+    // MARK: - 4.2-4.4 File import handler
+
+    private func handleFileImport(result: Result<URL, Error>) {
+        guard let child = selectedChild else { return }
+        switch result {
+        case .failure:
+            break
+        case .success(let url):
+            let importer = CSVImporter()
+            do {
+                let parsed = try importer.parse(url: url, childId: child.id)
+
+                // Fetch existing records for deduplication
+                let childId = child.id
+                let existingTemps = (try? modelContext.fetch(
+                    FetchDescriptor<TemperatureRecord>(predicate: #Predicate { $0.childId == childId })
+                )) ?? []
+                let existingMeds = (try? modelContext.fetch(
+                    FetchDescriptor<MedicationRecord>(predicate: #Predicate { $0.childId == childId })
+                )) ?? []
+
+                let deduped = importer.deduplicated(
+                    parseResult: parsed,
+                    existingTemperatureRecords: existingTemps,
+                    existingMedicationRecords: existingMeds
+                )
+
+                importPreviewResult = deduped
+                showImportPreview = true
+            } catch let error as CSVImportError {
+                importError = error.errorDescription
+                showImportError = true
+            } catch {
+                importError = error.localizedDescription
+                showImportError = true
+            }
+        }
+    }
+
+    // MARK: - 4.7 Toast
+
+    private func showToast(_ message: String) {
+        toastMessage = message
+        Task {
+            try? await Task.sleep(nanoseconds: 2_500_000_000)
+            toastMessage = nil
+        }
+    }
+
+    // MARK: - Delete child
 
     private func deleteChild(_ child: Child) {
         let childId = child.id

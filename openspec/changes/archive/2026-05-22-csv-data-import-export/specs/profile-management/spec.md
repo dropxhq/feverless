@@ -1,22 +1,4 @@
-## ADDED Requirements
-
-### Requirement: 儿童档案创建
-系统 SHALL 允许用户创建儿童档案，必填字段为姓名，可选字段为出生日期和头像 Emoji。
-
-#### Scenario: 创建第一个儿童
-- **WHEN** 用户首次打开 App 且无任何儿童档案
-- **THEN** 引导用户创建第一个儿童档案后进入首页
-
-#### Scenario: 添加更多儿童
-- **WHEN** 用户在"我的"页面点击"添加儿童"
-- **THEN** 展示创建表单，保存后新儿童出现在列表
-
-### Requirement: 儿童档案编辑与删除
-系统 SHALL 允许用户编辑儿童姓名/出生日期/头像，或删除儿童档案。删除时 SHALL 同时删除该儿童的所有体温和用药记录（cascade delete）。
-
-#### Scenario: 删除儿童档案
-- **WHEN** 用户确认删除某儿童档案
-- **THEN** 该儿童及其所有记录从 SwiftData 中删除，CloudKit 同步删除
+## MODIFIED Requirements
 
 ### Requirement: 当前儿童切换
 系统 SHALL 支持多儿童场景，ProfileView 的孩子列表中每个孩子行 SHALL 展示该孩子的最近一次体温记录值和记录时间（如有）作为辅助信息。当前选中的孩子 SHALL 通过视觉高亮（`checkmark.circle.fill` 图标 + 蓝色背景或边框）与其他孩子明显区分。点击孩子行即切换当前选中孩子。
