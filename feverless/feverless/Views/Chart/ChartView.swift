@@ -11,6 +11,7 @@ enum ChartTimeRange: String, CaseIterable {
     case today     = "今天"
     case yesterday = "昨天"
     case week      = "7天"
+    case all       = "全部"
 
     var dateRange: (start: Date, end: Date) {
         let now = Date()
@@ -24,6 +25,15 @@ enum ChartTimeRange: String, CaseIterable {
             return (yStart, min(yEnd, now))
         case .week:
             return (cal.date(byAdding: .day, value: -7, to: now)!, now)
+        case .all:
+            return (.distantPast, now)
+        }
+    }
+
+    var spansMultipleDays: Bool {
+        switch self {
+        case .today, .yesterday: return false
+        case .week, .all:        return true
         }
     }
 }
@@ -141,7 +151,7 @@ struct ChartView: View {
                 ContentUnavailableView(
                     "暂无记录",
                     systemImage: "chart.line.uptrend.xyaxis",
-                    description: Text("\(timeRange.rawValue)内没有体温记录")
+                    description: Text(timeRange == .all ? "暂无任何体温记录" : "\(timeRange.rawValue)内没有体温记录")
                 )
                 .frame(height: 220)
             } else {
@@ -233,7 +243,11 @@ struct ChartView: View {
             .chartXAxis {
                 AxisMarks(values: .automatic(desiredCount: 5)) { _ in
                     AxisGridLine()
-                    AxisValueLabel(format: .dateTime.hour().minute())
+                    if timeRange.spansMultipleDays {
+                        AxisValueLabel(format: .dateTime.month().day().hour())
+                    } else {
+                        AxisValueLabel(format: .dateTime.hour().minute())
+                    }
                 }
             }
             .frame(height: 220)
