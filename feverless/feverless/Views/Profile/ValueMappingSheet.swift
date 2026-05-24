@@ -85,13 +85,32 @@ struct ValueMappingSheet: View {
                     }
                 }
 
-                // Medication management shortcut
+                // Medication keyword summary — show all drugs and their aliases inline
                 if hasKeywordColumns {
                     Section("药物关键词") {
+                        ForEach(medicationCatalog.all) { def in
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(def.canonicalName)
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                                if def.keywords.isEmpty {
+                                    Text("暂无别名")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                } else {
+                                    Text(def.keywords.joined(separator: "、"))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .padding(.vertical, 2)
+                        }
+
                         Button {
                             showMedicationCatalog = true
                         } label: {
                             Label("管理药品", systemImage: "pills.circle")
+                                .foregroundStyle(.blue)
                         }
                     }
                 }
