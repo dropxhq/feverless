@@ -115,27 +115,48 @@ final class MedicationCatalog: ObservableObject {
 
     // MARK: - Display Helpers
 
-    func color(for canonicalName: String) -> Color {
-        switch canonicalName {
+    private static let paletteColors: [Color] = [
+        .yellow, .blue, .green, .orange, .purple, .pink, .teal, .indigo, .mint, .cyan
+    ]
+    private static let paletteEmojis: [String] = [
+        "🟡", "🔵", "🟢", "🟠", "🟣", "🩷", "🩵", "🫐", "🌿", "💊"
+    ]
+
+    func color(for def: MedicationDefinition) -> Color {
+        switch def.canonicalName {
         case "布洛芬":     return .yellow
         case "对乙酰氨基酚": return .blue
-        default:           return .gray
+        default:
+            let hash = abs(def.id.hashValue)
+            return Self.paletteColors[hash % Self.paletteColors.count]
         }
+    }
+
+    func emoji(for def: MedicationDefinition) -> String {
+        switch def.canonicalName {
+        case "布洛芬":     return "🟡"
+        case "对乙酰氨基酚": return "🔵"
+        default:
+            let hash = abs(def.id.hashValue)
+            return Self.paletteEmojis[hash % Self.paletteEmojis.count]
+        }
+    }
+
+    func iconBackground(for def: MedicationDefinition) -> Color {
+        color(for: def).opacity(0.12)
+    }
+
+    // Legacy overloads for call sites that only have the name
+    func color(for canonicalName: String) -> Color {
+        all.first(where: { $0.canonicalName == canonicalName }).map { color(for: $0) } ?? .gray
     }
 
     func emoji(for canonicalName: String) -> String {
-        switch canonicalName {
-        case "布洛芬":     return "🟡"
-        case "对乙酰氨基酚": return "🔵"
-        default:           return "⚪"
-        }
+        all.first(where: { $0.canonicalName == canonicalName }).map { emoji(for: $0) } ?? "⚪"
     }
 
     func iconBackground(for canonicalName: String) -> Color {
-        switch canonicalName {
-        case "布洛芬":     return Color.yellow.opacity(0.15)
-        case "对乙酰氨基酚": return Color.blue.opacity(0.1)
-        default:           return Color.gray.opacity(0.12)
-        }
+        all.first(where: { $0.canonicalName == canonicalName }).map { iconBackground(for: $0) } ?? Color.gray.opacity(0.12)
     }
+
 }

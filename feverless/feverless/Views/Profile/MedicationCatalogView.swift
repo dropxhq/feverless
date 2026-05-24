@@ -24,7 +24,7 @@ struct MedicationCatalogView: View {
                     editingDef = def
                 } label: {
                     HStack(spacing: 12) {
-                        Text(catalog.emoji(for: def.canonicalName))
+                        Text(catalog.emoji(for: def))
                             .font(.title3)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(def.canonicalName)
