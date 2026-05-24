@@ -86,7 +86,7 @@ struct ChartView: View {
     }
     private var useAxisDateOnly: Bool { axisSpanDays > 14 }
     private var useAxisMultiDay: Bool { axisSpanDays > 1 }
-    private var useMonthlyAggregation: Bool { axisSpanMonths > 6 }
+    private var useMonthlyAggregation: Bool { axisSpanMonths >= 3 && axisSpanMonths < 12 }
 
     /// 月度视图横坐标步长：根据实际月份数等间隔抽取，保证屏幕能放下
     private var xAxisMonthStride: Int {
@@ -145,7 +145,7 @@ struct ChartView: View {
     // 数据量超过阈值时，chart 切换到聚合视图以减少 GPU mark 数量
     private let chartPointThreshold = 80
 
-    private var useSeasonalChart: Bool { axisSpanMonths > 12 }
+    private var useSeasonalChart: Bool { axisSpanMonths >= 12 }
     private var useAggregatedChart: Bool { useSeasonalChart || useMonthlyAggregation || tempPoints.count > chartPointThreshold }
 
     /// 用于图表渲染的体温点：
@@ -181,9 +181,9 @@ struct ChartView: View {
         }
     }
 
-    /// 超阈值时每天只保留第一条用药记录；季节性视图不显示用药
+    /// 超阈值时每天只保留第一条用药记录；月度聚合及季节性视图不显示用药
     private var chartMedPoints: [MedPoint] {
-        if useSeasonalChart { return [] }
+        if useSeasonalChart || useMonthlyAggregation { return [] }
         guard useAggregatedChart else { return medPoints }
         let cal = Calendar.current
         var seenDays = Set<Date>()
@@ -579,10 +579,10 @@ struct ChartView: View {
             }
             .chartXAxis {
                 if useMonthlyAggregation {
-                    // 月度视图：按计算步长等间隔取标签，每个显示 "年+月"
-                    AxisMarks(values: .stride(by: .month, count: xAxisMonthStride)) { _ in
+                    // 月度聚合视图：每月一个刻度，显示 “N月”，最多展示全部12个
+                    AxisMarks(values: .stride(by: .month)) { _ in
                         AxisGridLine()
-                        AxisValueLabel(format: .dateTime.year().month(.abbreviated))
+                        AxisValueLabel(format: .dateTime.month())
                     }
                 } else {
                     AxisMarks(values: .automatic(desiredCount: axisSpanDays > 30 ? 4 : 5)) { _ in
@@ -638,7 +638,7 @@ struct ChartView: View {
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else if useAggregatedChart {
-                Text(useMonthlyAggregation ? "数据跨度超过 6 个月，图表显示每月最高体温" : "数据点较多，图表显示每日最高体温")
+                Text(useMonthlyAggregation ? "数据跨度超过 3 个月，图表显示每月最高体温" : "数据点较多，图表显示每日最高体温")
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
