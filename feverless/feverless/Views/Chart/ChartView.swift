@@ -73,15 +73,27 @@ struct ChartView: View {
             : timeRange.dateRange
     }
 
+    /// 实际数据起点："全部"模式 range.start 为 distantPast，改用第一个数据点时间
+    private var effectiveRangeStart: Date {
+        range.start == .distantPast ? (tempPoints.first?.timestamp ?? Date()) : range.start
+    }
+
     private var axisSpanDays: Int {
-        Calendar.current.dateComponents([.day], from: range.start, to: range.end).day ?? 0
+        Calendar.current.dateComponents([.day], from: effectiveRangeStart, to: range.end).day ?? 0
     }
     private var axisSpanMonths: Int {
-        Calendar.current.dateComponents([.month], from: range.start, to: range.end).month ?? 0
+        Calendar.current.dateComponents([.month], from: effectiveRangeStart, to: range.end).month ?? 0
     }
     private var useAxisDateOnly: Bool { axisSpanDays > 14 }
     private var useAxisMultiDay: Bool { axisSpanDays > 1 }
     private var useMonthlyAggregation: Bool { axisSpanMonths > 6 }
+
+    /// 月度视图横坐标步长：根据实际月份数等间隔抽取，保证屏幕能放下
+    private var xAxisMonthStride: Int {
+        let totalMonths = max(1, axisSpanMonths)
+        let maxFit = 4   // 保守估计屏幕能容纳的最大标签数
+        return max(1, Int(ceil(Double(totalMonths) / Double(maxFit))))
+    }
 
     private var customRangeLabel: String {
         let fmt = DateFormatter()
@@ -461,10 +473,10 @@ struct ChartView: View {
             }
             .chartXAxis {
                 if useMonthlyAggregation {
-                    // 月度视图：每月一个刻度，仅显示月份（跨年时加年份）
-                    AxisMarks(values: .stride(by: .month)) { _ in
+                    // 月度视图：按计算步长等间隔取标签，每个显示 "年+月"
+                    AxisMarks(values: .stride(by: .month, count: xAxisMonthStride)) { _ in
                         AxisGridLine()
-                        AxisValueLabel(format: .dateTime.month(.abbreviated))
+                        AxisValueLabel(format: .dateTime.year().month(.abbreviated))
                     }
                 } else {
                     AxisMarks(values: .automatic(desiredCount: axisSpanDays > 30 ? 4 : 5)) { _ in
@@ -481,6 +493,7 @@ struct ChartView: View {
                 }
             }
             .sheet(isPresented: $showingCustomPicker) { customPickerSheet }
+            .chartPlotStyle { $0.padding(.top, 26) }  // 为顶部 annotation 预留空间，防止溢出到按钮行
             .frame(height: 220)
             } // end if tempPoints.isEmpty
 
