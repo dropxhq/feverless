@@ -36,6 +36,14 @@ enum ChartTimeRange: String, CaseIterable {
         case .week, .all:        return true
         }
     }
+
+    /// How many days the range roughly covers — used to pick axis label granularity.
+    var dateOnlyAxis: Bool {
+        switch self {
+        case .today, .yesterday, .week: return false
+        case .all:                      return true
+        }
+    }
 }
 
 struct ChartView: View {
@@ -247,7 +255,9 @@ struct ChartView: View {
             .chartXAxis {
                 AxisMarks(values: .automatic(desiredCount: 5)) { _ in
                     AxisGridLine()
-                    if timeRange.spansMultipleDays {
+                    if timeRange.dateOnlyAxis {
+                        AxisValueLabel(format: .dateTime.year().month().day())
+                    } else if timeRange.spansMultipleDays {
                         AxisValueLabel(format: .dateTime.month().day().hour())
                     } else {
                         AxisValueLabel(format: .dateTime.hour().minute())
