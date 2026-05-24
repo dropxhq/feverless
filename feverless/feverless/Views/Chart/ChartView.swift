@@ -240,21 +240,11 @@ struct ChartView: View {
                 RuleMark(y: .value("发烧", 38.5))
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
                     .foregroundStyle(Color.red.opacity(0.55))
-                    .annotation(position: .leading, alignment: .center) {
-                        Text("38.5°")
-                            .font(.caption2)
-                            .foregroundStyle(Color.red.opacity(0.8))
-                    }
 
                 // 37.0°C normal reference line
                 RuleMark(y: .value("正常", 37.0))
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
                     .foregroundStyle(Color.teal.opacity(0.5))
-                    .annotation(position: .leading, alignment: .center) {
-                        Text("37°")
-                            .font(.caption2)
-                            .foregroundStyle(Color.teal.opacity(0.8))
-                    }
 
                 // Medication time markers
                 ForEach(medPoints) { point in
@@ -278,6 +268,35 @@ struct ChartView: View {
                 }
             }
             .chartYScale(domain: yDomain)
+            .chartYAxis {
+                AxisMarks(values: .automatic(desiredCount: 5)) { value in
+                    AxisGridLine()
+                    AxisValueLabel {
+                        if let v = value.as(Double.self) {
+                            if abs(v - 38.5) < 0.01 {
+                                Text("38.5°")
+                                    .font(.caption2)
+                                    .foregroundStyle(Color.red.opacity(0.85))
+                            } else if abs(v - 37.0) < 0.01 {
+                                Text("37°")
+                                    .font(.caption2)
+                                    .foregroundStyle(Color.teal.opacity(0.85))
+                            } else {
+                                Text(String(Int(v)))
+                                    .font(.caption2)
+                            }
+                        }
+                    }
+                }
+                AxisMarks(values: [38.5]) { _ in
+                    AxisGridLine().foregroundStyle(Color.red.opacity(0.2))
+                    AxisValueLabel {
+                        Text("38.5°")
+                            .font(.caption2)
+                            .foregroundStyle(Color.red.opacity(0.85))
+                    }
+                }
+            }
             .chartXAxis {
                 AxisMarks(values: .automatic(desiredCount: 5)) { _ in
                     AxisGridLine()
