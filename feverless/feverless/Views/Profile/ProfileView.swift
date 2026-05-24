@@ -7,6 +7,16 @@ import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
 
+// MARK: - ValueMappingInput
+
+/// Data bundle used with .sheet(item:) to guarantee ValueMappingSheet always receives fresh data.
+struct ValueMappingInput: Identifiable {
+    let id = UUID()
+    let valueGroups: [UnresolvedValueGroup]
+    let config: ImportMappingConfig
+    let hasKeywordColumns: Bool
+}
+
 // MARK: - ProfileView
 
 struct ProfileView: View {
@@ -34,11 +44,8 @@ struct ProfileView: View {
     @State private var csvRawRows: [[String]] = []
     @State private var pendingConfig: ImportMappingConfig = ImportMappingConfig()
     @State private var showColumnMappingSheet = false
-    @State private var showValueMappingSheet = false
-    @State private var unresolvedValueGroups: [UnresolvedValueGroup] = []
-    @State private var hasKeywordColumns: Bool = false
+    @State private var valueMappingInput: ValueMappingInput? = nil
     @State private var columnMappingDidComplete: Bool = false
-    @State private var valueMappingDidComplete: Bool = false
 
     // Toast
     @State private var toastMessage: String?
@@ -166,19 +173,16 @@ struct ProfileView: View {
                     columnMappingDidComplete = true
                 }
             }
-            // 9.3 Value mapping sheet
-            .sheet(isPresented: $showValueMappingSheet, onDismiss: {
-                guard valueMappingDidComplete else { return }
-                valueMappingDidComplete = false
-                proceedToParse()
-            }) {
+            // 9.3 Value mapping sheet — uses sheet(item:) so data is always fresh
+            .sheet(item: $valueMappingInput) { input in
                 ValueMappingSheet(
-                    valueGroups: unresolvedValueGroups,
-                    config: pendingConfig,
-                    hasKeywordColumns: hasKeywordColumns
+                    valueGroups: input.valueGroups,
+                    config: input.config,
+                    hasKeywordColumns: input.hasKeywordColumns
                 ) { updatedConfig in
                     pendingConfig = updatedConfig
-                    valueMappingDidComplete = true
+                    valueMappingInput = nil
+                    proceedToParse()
                 }
             }
             // Import error alert
@@ -306,20 +310,20 @@ struct ProfileView: View {
             }
         }
 
-        if !groups.isEmpty {
-            unresolvedValueGroups = groups
-        }
-
         // 2.1 Check if any column uses keyword extraction (regardless of enum groups)
         let keywordColumnsExist = pendingConfig.columnMappings.values.contains {
             if case .keywordExtract(_, let extracts) = $0 { return extracts }
             return false
         }
-        hasKeywordColumns = keywordColumnsExist
 
         // 2.2 Show ValueMappingSheet if there are unresolved enum values OR keyword columns
-        if !groups.isEmpty || hasKeywordColumns {
-            showValueMappingSheet = true
+        // Use sheet(item:) to bind data directly to the sheet, avoiding stale-state timing issues
+        if !groups.isEmpty || keywordColumnsExist {
+            valueMappingInput = ValueMappingInput(
+                valueGroups: groups,
+                config: pendingConfig,
+                hasKeywordColumns: keywordColumnsExist
+            )
         } else {
             proceedToParse()
         }

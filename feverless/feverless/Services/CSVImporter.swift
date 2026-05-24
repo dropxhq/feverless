@@ -148,10 +148,16 @@ struct CSVImporter {
                 columnInfos.append(ColumnInfo(index: i, header: header, rule: userRule))
                 continue
             }
-            // Auto-resolve via alias table
-            if let resolved = aliasTable.resolveColumnName(header, config: config) {
-                if resolved != header { report.appliedColumnMappings[header] = resolved }
-                columnInfos.append(ColumnInfo(index: i, header: header, rule: .simple(field: resolved)))
+            // Auto-resolve via alias table (may return compound rule for position keywords)
+            if let autoRule = aliasTable.resolveColumnRule(header, config: config) {
+                switch autoRule {
+                case .simple(let f):
+                    if f != header { report.appliedColumnMappings[header] = f }
+                case .compound(let f, _):
+                    report.appliedColumnMappings[header] = f
+                default: break
+                }
+                columnInfos.append(ColumnInfo(index: i, header: header, rule: autoRule))
                 continue
             }
             // Unresolved → ignore

@@ -80,8 +80,9 @@ struct ColumnMappingSheet: View {
         let hasRecordType = entries.contains { e in
             if e.autoResolvedField == "record_type" { return true }
             if e.targetField == "record_type" { return true }
-            // Compound value columns implicitly cover record_type
+            // Compound value columns (user-selected or auto-resolved via position keyword) cover record_type
             if e.targetField == "value" { return true }
+            if e.autoResolvedField == "value" { return true }
             return false
         }
 
@@ -136,76 +137,73 @@ struct ColumnMappingSheet: View {
     private func columnRow(entry: Binding<MappingEntry>) -> some View {
         let e = entry.wrappedValue
 
-        if let resolvedField = e.autoResolvedField {
-            // 6.2 Auto-resolved: show ✓ (read-only)
+        // All columns use the editable picker; auto-resolved ones show a green badge
+        VStack(alignment: .leading, spacing: 10) {
             HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(e.header).font(.headline)
-                    Text("→ \(displayName(for: resolvedField))")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                Text(e.header).font(.headline)
                 Spacer()
-                Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-            }
-        } else {
-            // 6.2 Unresolved: show ! and picker
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Text(e.header).font(.headline)
-                    Spacer()
+                if e.autoResolvedField != nil {
+                    Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                } else {
                     Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.orange)
                 }
+            }
 
-                // Primary field picker
-                Picker("映射为", selection: entry.targetField) {
-                    // 6.6 Ignore option
-                    Text("忽略此列").tag(nil as String?)
-                    ForEach(targetFieldOptions, id: \.id) { option in
-                        Text(option.displayName).tag(option.id as String?)
-                    }
-                }
-                .pickerStyle(.menu)
-
-                // 6.3 Compound inline expansion when "体温列" is selected
-                if entry.wrappedValue.targetField == "value" {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("指定测量位置：")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-
-                        Picker("测量位置", selection: entry.impliedMethod) {
-                            ForEach(TemperaturePositionCatalog.shared.all, id: \.canonicalName) { def in
-                                Text(def.canonicalName).tag(def.canonicalName)
-                            }
-                        }
-                        .pickerStyle(.menu)
-                    }
-                    .padding(.leading, 12)
-                }
-
-                // 6.4 Keyword extraction checkbox (when target is nil or "notes")
-                let canExtract = entry.wrappedValue.targetField == nil
-                    || entry.wrappedValue.targetField == "notes"
-                if canExtract {
-                    Toggle("从此列提取药物关键词", isOn: entry.extractsMedications)
-                        .font(.subheadline)
+            // Primary field picker
+            Picker("映射为", selection: entry.targetField) {
+                Text("忽略此列").tag(nil as String?)
+                ForEach(targetFieldOptions, id: \.id) { option in
+                    Text(option.displayName).tag(option.id as String?)
                 }
             }
-            .padding(.vertical, 4)
+            .pickerStyle(.menu)
+
+            // Compound inline expansion when "体温列" is selected
+            if entry.wrappedValue.targetField == "value" {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("指定测量位置：")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    Picker("测量位置", selection: entry.impliedMethod) {
+                        ForEach(TemperaturePositionCatalog.shared.all, id: \.canonicalName) { def in
+                            Text(def.canonicalName).tag(def.canonicalName)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                }
+                .padding(.leading, 12)
+            }
+
+            // Keyword extraction checkbox (when target is nil or "notes")
+            let canExtract = entry.wrappedValue.targetField == nil
+                || entry.wrappedValue.targetField == "notes"
+            if canExtract {
+                Toggle("从此列提取药物关键词", isOn: entry.extractsMedications)
+                    .font(.subheadline)
+            }
         }
+        .padding(.vertical, 4)
     }
 
     // MARK: - Build entries from headers + config
 
     private func buildEntries() {
         entries = allHeaders.map { header in
-            let autoResolved = aliasTable.resolveColumnName(header, config: config)
-            // If auto-resolvable, don't show user config override for it
-            let existingRule: ColumnMappingRule? = autoResolved == nil ? config.columnMappings[header] : nil
+            let autoRule = aliasTable.resolveColumnRule(header, config: config)
+            // Derive the auto-resolved field name from the rule (nil = unresolved)
+            let autoResolvedField: String? = {
+                switch autoRule {
+                case .simple(let f):      return f
+                case .compound(let f, _): return f
+                default:                  return nil
+                }
+            }()
+            // Prefer user config override if present, otherwise use auto-resolved rule
+            let existingRule: ColumnMappingRule? = config.columnMappings[header] ?? autoRule
             return MappingEntry(
                 header: header,
-                autoResolvedField: autoResolved,
+                autoResolvedField: autoResolvedField,
                 existingRule: existingRule
             )
         }
@@ -216,8 +214,6 @@ struct ColumnMappingSheet: View {
     private func buildUpdatedConfig() -> ImportMappingConfig {
         var newConfig = config
         for entry in entries {
-            // Skip auto-resolved columns (no override needed)
-            guard entry.autoResolvedField == nil else { continue }
 
             let rule: ColumnMappingRule
             if let field = entry.targetField {

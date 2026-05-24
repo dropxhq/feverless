@@ -35,17 +35,42 @@ struct ImportAliasTable {
     // MARK: - 2.3 Resolve column name (three-layer priority)
 
     /// Returns the internal field name for a CSV header, or nil if unresolvable.
-    /// Priority: rawValue match → built-in Chinese alias → user config simple mapping
+    /// Priority: rawValue match → built-in Chinese alias → user config simple mapping → position keyword
     func resolveColumnName(_ header: String, config: ImportMappingConfig) -> String? {
-        // Layer 1: exact rawValue match
-        if knownInternalFields.contains(header) { return header }
+        if let rule = resolveColumnRule(header, config: config) {
+            switch rule {
+            case .simple(let f):       return f
+            case .compound(let f, _):  return f
+            default:                   return nil
+            }
+        }
+        return nil
+    }
+
+    /// Returns the full ColumnMappingRule for a CSV header, or nil if unresolvable.
+    /// Adds a 4th layer: position keyword match → compound rule (value + implied method).
+    func resolveColumnRule(_ header: String, config: ImportMappingConfig) -> ColumnMappingRule? {
+        // Layer 1: exact rawValue match (internal field name used as header)
+        if knownInternalFields.contains(header) { return .simple(field: header) }
 
         // Layer 2: built-in Chinese alias
-        if let field = columnAliases[header] { return field }
+        if let field = columnAliases[header] { return .simple(field: field) }
 
-        // Layer 3: user config simple mapping (compound/keyword/ignore are handled separately)
+        // Layer 3: user config simple mapping
         if let rule = config.columnMappings[header], case .simple(let field) = rule {
-            return field
+            return .simple(field: field)
+        }
+
+        // Layer 4: column header matches a temperature position keyword
+        // e.g. "腋温" → compound(field: "value", impliedValues: ["method": "腋下", "record_type": "temperature"])
+        if let position = TemperaturePositionCatalog.shared.findByKeyword(header) {
+            return .compound(
+                field: "value",
+                impliedValues: [
+                    "method": position.canonicalName,
+                    "record_type": "temperature",
+                ]
+            )
         }
 
         return nil
