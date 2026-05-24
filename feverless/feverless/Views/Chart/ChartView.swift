@@ -11,6 +11,7 @@ enum ChartTimeRange: String, CaseIterable {
     case today     = "今天"
     case yesterday = "昨天"
     case week      = "7天"
+    case custom    = "自定义"
     case all       = "全部"
 
     var dateRange: (start: Date, end: Date) {
@@ -25,6 +26,8 @@ enum ChartTimeRange: String, CaseIterable {
             return (yStart, min(yEnd, now))
         case .week:
             return (cal.date(byAdding: .day, value: -7, to: now)!, now)
+        case .custom:
+            return (.distantPast, now) // overridden in ChartView
         case .all:
             return (.distantPast, now)
         }
@@ -32,16 +35,8 @@ enum ChartTimeRange: String, CaseIterable {
 
     var spansMultipleDays: Bool {
         switch self {
-        case .today, .yesterday: return false
-        case .week, .all:        return true
-        }
-    }
-
-    /// How many days the range roughly covers — used to pick axis label granularity.
-    var dateOnlyAxis: Bool {
-        switch self {
-        case .today, .yesterday, .week: return false
-        case .all:                      return true
+        case .today, .yesterday:    return false
+        case .week, .custom, .all:  return true
         }
     }
 }
@@ -52,8 +47,27 @@ struct ChartView: View {
 
     let selectedChild: Child?
     @State private var timeRange: ChartTimeRange = .today
+    @State private var customStart: Date = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date()
+    @State private var customEnd: Date = Date()
+    @State private var showingCustomPicker = false
 
-    private var range: (start: Date, end: Date) { timeRange.dateRange }
+    private var range: (start: Date, end: Date) {
+        timeRange == .custom
+            ? (Calendar.current.startOfDay(for: customStart), customEnd)
+            : timeRange.dateRange
+    }
+
+    private var axisSpanDays: Int {
+        Calendar.current.dateComponents([.day], from: range.start, to: range.end).day ?? 0
+    }
+    private var useAxisDateOnly: Bool { axisSpanDays > 14 }
+    private var useAxisMultiDay: Bool { axisSpanDays > 1 }
+
+    private var customRangeLabel: String {
+        let fmt = DateFormatter()
+        fmt.dateFormat = "M/d"
+        return "\(fmt.string(from: customStart))–\(fmt.string(from: customEnd))"
+    }
 
     // Flattened temperature readings with their parent record timestamps
     private struct TempPoint: Identifiable {
@@ -141,16 +155,28 @@ struct ChartView: View {
                 Spacer()
                 HStack(spacing: 4) {
                     ForEach(ChartTimeRange.allCases, id: \.self) { r in
-                        Button(r.rawValue) { timeRange = r }
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(timeRange == r ? .white : Color.secondary)
-                            .padding(.horizontal, 9)
-                            .padding(.vertical, 4)
-                            .background(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .fill(timeRange == r ? Color.blue : Color.gray.opacity(0.1))
-                            )
-                            .buttonStyle(.plain)
+                        Button {
+                            timeRange = r
+                            if r == .custom { showingCustomPicker = true }
+                        } label: {
+                            if r == .custom {
+                                HStack(spacing: 3) {
+                                    Image(systemName: "calendar").font(.system(size: 10))
+                                    Text(r.rawValue)
+                                }
+                            } else {
+                                Text(r.rawValue)
+                            }
+                        }
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(timeRange == r ? .white : Color.secondary)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 4)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(timeRange == r ? Color.blue : Color.gray.opacity(0.1))
+                        )
+                        .buttonStyle(.plain)
                     }
                 }
             }
@@ -255,15 +281,16 @@ struct ChartView: View {
             .chartXAxis {
                 AxisMarks(values: .automatic(desiredCount: 5)) { _ in
                     AxisGridLine()
-                    if timeRange.dateOnlyAxis {
+                    if useAxisDateOnly {
                         AxisValueLabel(format: .dateTime.year().month().day())
-                    } else if timeRange.spansMultipleDays {
+                    } else if useAxisMultiDay {
                         AxisValueLabel(format: .dateTime.month().day().hour())
                     } else {
                         AxisValueLabel(format: .dateTime.hour().minute())
                     }
                 }
             }
+            .sheet(isPresented: $showingCustomPicker) { customPickerSheet }
             .frame(height: 220)
             } // end if tempPoints.isEmpty
 
@@ -320,6 +347,24 @@ struct ChartView: View {
             }
         }
         return groups
+    }
+
+    @ViewBuilder
+    private var customPickerSheet: some View {
+        NavigationStack {
+            Form {
+                DatePicker("开始日期", selection: $customStart, in: ...customEnd, displayedComponents: .date)
+                DatePicker("结束日期", selection: $customEnd, in: customStart...Date(), displayedComponents: .date)
+            }
+            .navigationTitle("自定义范围")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("完成") { showingCustomPicker = false }
+                }
+            }
+        }
+        .presentationDetents([.medium])
     }
 
     private var yDomain: ClosedRange<Double> {
