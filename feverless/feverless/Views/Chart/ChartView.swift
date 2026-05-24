@@ -584,6 +584,18 @@ struct ChartView: View {
                         AxisGridLine()
                         AxisValueLabel(format: .dateTime.month())
                     }
+                } else if chartTempPoints.count <= 8 {
+                    // 数据点较少：直接用实际时间戳作为刻度，确保每个点都有标签
+                    AxisMarks(values: chartTempPoints.map { $0.timestamp }) { _ in
+                        AxisGridLine()
+                        if useAxisDateOnly {
+                            AxisValueLabel(format: .dateTime.month().day())
+                        } else if useAxisMultiDay {
+                            AxisValueLabel(format: .dateTime.month().day().hour())
+                        } else {
+                            AxisValueLabel(format: .dateTime.hour().minute())
+                        }
+                    }
                 } else {
                     AxisMarks(values: .automatic(desiredCount: axisSpanDays > 30 ? 4 : 5)) { _ in
                         AxisGridLine()

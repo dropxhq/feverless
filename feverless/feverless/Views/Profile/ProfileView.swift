@@ -24,48 +24,55 @@ struct ProfileView: View {
     var body: some View {
         NavigationStack {
             List {
-                // Children list
-                ForEach(children) { child in
-                    childRow(child)
-                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                            Button(role: .destructive) {
-                                deleteChild(child)
-                            } label: {
-                                Label("删除", systemImage: "trash")
+                // MARK: 儿童档案 Section
+                Section {
+                    ForEach(children) { child in
+                        childRow(child)
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                Button(role: .destructive) {
+                                    deleteChild(child)
+                                } label: {
+                                    Label("删除", systemImage: "trash")
+                                }
+
+                                Button {
+                                    childToEdit = child
+                                } label: {
+                                    Label("编辑", systemImage: "pencil")
+                                }
+                                .tint(.blue)
                             }
+                    }
 
-                            Button {
-                                childToEdit = child
-                            } label: {
-                                Label("编辑", systemImage: "pencil")
-                            }
-                            .tint(.blue)
-                        }
-                }
-
-                // 7.4 Medication management section
-                NavigationLink {
-                    MedicationCatalogView()
-                } label: {
-                    Label("药品管理", systemImage: "pills.circle")
-                }
-
-                NavigationLink {
-                    TemperaturePositionCatalogView(isSheet: false)
-                } label: {
-                    Label("体温位置管理", systemImage: "thermometer.medium")
-                }
-            }
-            .navigationTitle("我的")
-            .toolbar {
-                ToolbarItem(placement: .automatic) {
                     Button {
                         showAddChild = true
                     } label: {
-                        Image(systemName: "plus")
+                        Label("添加儿童", systemImage: "plus.circle.fill")
+                            .foregroundStyle(.blue)
                     }
+                } header: {
+                    Text("儿童档案")
+                }
+
+                // MARK: 配置 Section
+                Section {
+                    NavigationLink {
+                        MedicationCatalogView()
+                    } label: {
+                        Label("药品管理", systemImage: "pills.circle")
+                    }
+
+                    NavigationLink {
+                        TemperaturePositionCatalogView(isSheet: false)
+                    } label: {
+                        Label("体温位置管理", systemImage: "thermometer.medium")
+                    }
+                } header: {
+                    Text("配置")
                 }
             }
+            .navigationTitle("我的")
+            .navigationBarTitleDisplayMode(.large)
             .sheet(isPresented: $showAddChild) {
                 AddChildView(onSave: nil)
             }
