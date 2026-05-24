@@ -1,18 +1,18 @@
 import SwiftUI
 import SwiftData
 
-// MARK: - 4.1 Import preview sheet
+// MARK: - ImportPreviewSheet
 
 struct ImportPreviewSheet: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
 
     let parseResult: CSVParseResult
+    let importConfig: ImportMappingConfig
     let onComplete: (Int) -> Void
 
-    // MARK: - Computed
+    // MARK: - Helpers
 
-    // 4.5 All-duplicate check
     private var isAllDuplicate: Bool {
         parseResult.temperatureRows.isEmpty && parseResult.medicationRows.isEmpty
     }
@@ -21,34 +21,118 @@ struct ImportPreviewSheet: View {
         parseResult.temperatureRows.count + parseResult.medicationRows.count
     }
 
+    // 8.1 Preview time formatter (HH:mm)
+    private let timeFmt: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm"
+        return f
+    }()
+
+    // 8.1 First 3 records merged and sorted by timestamp
+    private var previewRecords: [PreviewRecord] {
+        let temps = parseResult.temperatureRows.map { r in
+            PreviewRecord(
+                timestamp: r.timestamp,
+                label: String(format: "%.1f°C %@ %@", r.value, r.method.displayName, timeFmt.string(from: r.timestamp))
+            )
+        }
+        let meds = parseResult.medicationRows.map { r in
+            PreviewRecord(
+                timestamp: r.timestamp,
+                label: "\(r.type.displayName) \(timeFmt.string(from: r.timestamp))"
+            )
+        }
+        return (temps + meds).sorted { $0.timestamp < $1.timestamp }.prefix(3).map { $0 }
+    }
+
+    private struct PreviewRecord {
+        let timestamp: Date
+        let label: String
+    }
+
     // MARK: - Body
 
     var body: some View {
         NavigationStack {
             List {
-                // 4.4 Preview counts
+                // Counts section
                 Section("导入预览") {
                     HStack {
                         Label("体温记录", systemImage: "thermometer")
                         Spacer()
-                        Text("\(parseResult.temperatureRows.count) 条")
-                            .foregroundStyle(.secondary)
+                        Text("\(parseResult.temperatureRows.count) 条").foregroundStyle(.secondary)
                     }
                     HStack {
                         Label("用药记录", systemImage: "pill")
                         Spacer()
-                        Text("\(parseResult.medicationRows.count) 条")
-                            .foregroundStyle(.secondary)
+                        Text("\(parseResult.medicationRows.count) 条").foregroundStyle(.secondary)
                     }
                     HStack {
                         Label("重复跳过", systemImage: "arrow.uturn.backward.circle")
                         Spacer()
-                        Text("\(parseResult.skippedCount) 条")
-                            .foregroundStyle(.secondary)
+                        Text("\(parseResult.skippedCount) 条").foregroundStyle(.secondary)
                     }
                 }
 
-                // 4.5 All-duplicate message
+                // 8.1 Sample records preview
+                if !previewRecords.isEmpty {
+                    Section("示例记录") {
+                        ForEach(previewRecords.indices, id: \.self) { i in
+                            Text(previewRecords[i].label)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
+                // 8.2 Mapping summary
+                let report = parseResult.mappingReport
+                let hasColumnMappings = !report.appliedColumnMappings.isEmpty
+                let hasValueMappings = !report.appliedValueCounts.isEmpty
+                let hasKeywordExtraction = report.keywordExtractionCount > 0
+
+                if hasColumnMappings || hasValueMappings || hasKeywordExtraction {
+                    Section("映射摘要") {
+                        if hasColumnMappings {
+                            HStack {
+                                Text("列名映射")
+                                Spacer()
+                                Text("\(report.appliedColumnMappings.count) 列").foregroundStyle(.secondary)
+                            }
+                            ForEach(report.appliedColumnMappings.keys.sorted(), id: \.self) { header in
+                                if let field = report.appliedColumnMappings[header] {
+                                    Text("\(header) → \(fieldDisplayName(field))")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+
+                        if hasValueMappings {
+                            ForEach(report.appliedValueCounts.keys.sorted(), id: \.self) { field in
+                                if let counts = report.appliedValueCounts[field] {
+                                    let total = counts.values.reduce(0, +)
+                                    HStack {
+                                        Text("值映射（\(fieldDisplayName(field))）")
+                                        Spacer()
+                                        Text("\(total) 条").foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                        }
+
+                        // 8.3 Keyword extraction count
+                        if hasKeywordExtraction {
+                            HStack {
+                                Text("关键词提取")
+                                Spacer()
+                                Text("\(report.keywordExtractionCount) 条用药记录").foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+
+                // All-duplicate message
                 if isAllDuplicate {
                     Section {
                         Text("全部 \(parseResult.skippedCount) 条记录已存在，无需导入")
@@ -63,7 +147,6 @@ struct ImportPreviewSheet: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("取消") { dismiss() }
                 }
-                // 4.5 Confirm button disabled when all duplicates
                 ToolbarItem(placement: .confirmationAction) {
                     Button("确认导入") { confirmImport() }
                         .fontWeight(.semibold)
@@ -73,17 +156,33 @@ struct ImportPreviewSheet: View {
         }
     }
 
-    // MARK: - 4.6 Confirm import
+    // MARK: - Confirm import
 
     private func confirmImport() {
-        for record in parseResult.temperatureRows {
-            modelContext.insert(record)
-        }
-        for record in parseResult.medicationRows {
-            modelContext.insert(record)
-        }
+        for record in parseResult.temperatureRows { modelContext.insert(record) }
+        for record in parseResult.medicationRows  { modelContext.insert(record) }
         try? modelContext.save()
+
+        // 8.4 Persist mapping config for future imports
+        ImportConfigStore.save(importConfig)
+
         onComplete(totalImportCount)
         dismiss()
+    }
+
+    // MARK: - Helpers
+
+    private let fieldDisplayNames: [String: String] = [
+        "timestamp": "时间",
+        "record_type": "记录类型",
+        "value": "数值",
+        "method": "测量方式",
+        "medication_type": "药物类型",
+        "concurrent_temperature": "同步体温",
+        "notes": "备注",
+    ]
+
+    private func fieldDisplayName(_ field: String) -> String {
+        fieldDisplayNames[field] ?? field
     }
 }

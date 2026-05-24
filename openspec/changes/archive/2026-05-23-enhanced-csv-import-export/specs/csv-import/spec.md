@@ -1,4 +1,4 @@
-## ADDED Requirements
+## MODIFIED Requirements
 
 ### Requirement: CSV 文件选择与解析
 系统 SHALL 在 ProfileView 数据管理区提供"导入数据"入口，点击后打开系统文件选择
@@ -39,6 +39,8 @@
 - **WHEN** CSV 文件的时间列使用 `2026/05/20 10:30` 格式
 - **THEN** 系统成功解析并补充设备本地时区
 
+---
+
 ### Requirement: 格式错误提示
 系统 SHALL 在解析过程中无法完成映射（必要字段缺失）或数据无效时提示用户。必要字
 段（记录类型、时间）在 `ColumnMappingSheet` 中强制要求完成映射，未映射时"继续"
@@ -58,6 +60,8 @@
 #### Scenario: 错误后不写入数据
 - **WHEN** 解析过程中发现任何数据行级格式错误
 - **THEN** 不向 SwiftData 写入任何记录，数据库保持原状
+
+---
 
 ### Requirement: 导入预览与确认
 解析成功后系统 SHALL 弹出增强版预览 Sheet，展示以下内容：
@@ -92,18 +96,6 @@
 - **WHEN** 用户在预览 Sheet 点击"确认导入"
 - **THEN** 将非重复记录写入 SwiftData，关联到当前选中孩子，保存本次映射配置到
   UserDefaults，并显示成功 Toast
-
-#### Scenario: 所有记录均重复
-- **WHEN** CSV 中所有记录均已存在于当前孩子的数据中
-- **THEN** 预览 Sheet 显示"全部 N 条记录已存在，无需导入"，确认按钮禁用
-
-#### Scenario: 用户取消导入
-- **WHEN** 用户在预览 Sheet 点击"取消"
-- **THEN** 关闭 Sheet，不写入任何数据
-
-#### Scenario: 确认导入写入数据
-- **WHEN** 用户在预览 Sheet 点击"确认导入"
-- **THEN** 将非重复记录写入 SwiftData，关联到当前选中孩子，并显示成功 Toast："已成功导入 N 条记录"
 
 #### Scenario: 所有记录均重复
 - **WHEN** CSV 中所有记录均已存在于当前孩子的数据中

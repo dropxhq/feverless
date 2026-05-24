@@ -2,9 +2,10 @@ import Foundation
 
 struct CSVExporter {
 
-    private static let header = "record_type,timestamp,value,method,medication_type,concurrent_temperature,notes"
+    // 5.1 New Chinese header; 5.2 time column first
+    private static let header = "时间,记录类型,数值,测量方式,药物类型,同步体温,备注"
 
-    // MARK: - 1.2 Export
+    // MARK: - Export
 
     func export(temperatureRecords: [TemperatureRecord], medicationRecords: [MedicationRecord]) -> String {
         let formatter = ISO8601DateFormatter()
@@ -12,24 +13,29 @@ struct CSVExporter {
 
         var lines = [Self.header]
 
+        // 5.2 Sort by timestamp ascending; time column first
         let tempRows = temperatureRecords.sorted { $0.timestamp < $1.timestamp }.map { r in
-            csvRow("temperature",
-                   formatter.string(from: r.timestamp),
-                   String(r.value),
-                   r.methodRaw,
-                   "",
-                   "",
-                   r.notes)
+            csvRow(
+                formatter.string(from: r.timestamp),  // 时间
+                "体温",                                 // 5.3 record_type → displayName
+                String(r.value),                       // 数值
+                r.method.displayName,                  // 5.4 method → displayName
+                "",                                    // 药物类型
+                "",                                    // 同步体温
+                r.notes                                // 备注
+            )
         }
 
         let medRows = medicationRecords.sorted { $0.timestamp < $1.timestamp }.map { r in
-            csvRow("medication",
-                   formatter.string(from: r.timestamp),
-                   "",
-                   "",
-                   r.typeRaw,
-                   r.concurrentTemperature.map { String($0) } ?? "",
-                   r.notes)
+            csvRow(
+                formatter.string(from: r.timestamp),                     // 时间
+                "用药",                                                    // 5.3 record_type → displayName
+                "",                                                       // 数值
+                "",                                                       // 测量方式
+                r.type.displayName,                                       // 5.5 medication_type → displayName
+                r.concurrentTemperature.map { String($0) } ?? "",         // 同步体温
+                r.notes                                                   // 备注
+            )
         }
 
         lines.append(contentsOf: tempRows)
@@ -37,7 +43,7 @@ struct CSVExporter {
         return lines.joined(separator: "\r\n")
     }
 
-    // MARK: - 1.3 Write to temporary file
+    // MARK: - Write to temporary file
 
     func writeToTemporaryFile(csvString: String, fileName: String) throws -> URL {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
@@ -45,7 +51,7 @@ struct CSVExporter {
         return url
     }
 
-    // MARK: - 1.4 File name generation
+    // MARK: - File name generation
 
     func generateFileName(childName: String, startDate: Date, endDate: Date) -> String {
         let fmt = DateFormatter()

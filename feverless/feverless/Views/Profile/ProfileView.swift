@@ -23,15 +23,22 @@ struct ProfileView: View {
     @State private var childForExport: Child?
     @State private var showFileImporter = false
 
-    // 4.3 Import error alert
+    // Import error alert
     @State private var importError: String?
     @State private var showImportError = false
 
-    // 4.4 Import preview sheet
+    // Import preview sheet
     @State private var importPreviewResult: CSVParseResult?
     @State private var showImportPreview = false
 
-    // 4.7 Success toast
+    // Multi-step import flow state
+    @State private var csvRawRows: [[String]] = []
+    @State private var pendingConfig: ImportMappingConfig = ImportMappingConfig()
+    @State private var showColumnMappingSheet = false
+    @State private var showValueMappingSheet = false
+    @State private var unresolvedValueGroups: [UnresolvedValueGroup] = []
+
+    // Toast
     @State private var toastMessage: String?
 
     private var selectedChild: Child? {
@@ -115,22 +122,42 @@ struct ProfileView: View {
             .sheet(item: $childForExport) { child in
                 ExportSheet(child: child)
             }
-            // 4.4 Import preview sheet
+            // Import preview sheet
             .sheet(isPresented: $showImportPreview) {
                 if let result = importPreviewResult {
-                    ImportPreviewSheet(parseResult: result) { count in
+                    ImportPreviewSheet(parseResult: result, importConfig: pendingConfig) { count in
                         showToast("已成功导入 \(count) 条记录")
                     }
                 }
             }
-            // 4.2 File importer
+            // File importer
             .fileImporter(
                 isPresented: $showFileImporter,
                 allowedContentTypes: [.commaSeparatedText]
             ) { result in
                 handleFileImport(result: result)
             }
-            // 4.3 Import error alert
+            // 9.2 Column mapping sheet
+            .sheet(isPresented: $showColumnMappingSheet) {
+                ColumnMappingSheet(
+                    allHeaders: csvRawRows.first?.map { $0.trimmingCharacters(in: .whitespaces) } ?? [],
+                    config: pendingConfig
+                ) { updatedConfig in
+                    pendingConfig = updatedConfig
+                    proceedToValueDetection()
+                }
+            }
+            // 9.3 Value mapping sheet
+            .sheet(isPresented: $showValueMappingSheet) {
+                ValueMappingSheet(
+                    valueGroups: unresolvedValueGroups,
+                    config: pendingConfig
+                ) { updatedConfig in
+                    pendingConfig = updatedConfig
+                    proceedToParse()
+                }
+            }
+            // Import error alert
             .alert("导入失败", isPresented: $showImportError) {
                 Button("好") {}
             } message: {
@@ -191,42 +218,107 @@ struct ProfileView: View {
         }
     }
 
-    // MARK: - 4.2-4.4 File import handler
+    // MARK: - Import flow
 
+    // 9.1 Entry point: load saved config, read raw rows, detect unresolved columns
     private func handleFileImport(result: Result<URL, Error>) {
-        guard let child = selectedChild else { return }
+        guard selectedChild != nil else { return }
         switch result {
         case .failure:
             break
         case .success(let url):
-            let importer = CSVImporter()
             do {
-                let parsed = try importer.parse(url: url, childId: child.id)
+                let importer = CSVImporter()
+                csvRawRows = try importer.readRawRows(url: url)
+                pendingConfig = ImportConfigStore.load()
 
-                // Fetch existing records for deduplication
-                let childId = child.id
-                let existingTemps = (try? modelContext.fetch(
-                    FetchDescriptor<TemperatureRecord>(predicate: #Predicate { $0.childId == childId })
-                )) ?? []
-                let existingMeds = (try? modelContext.fetch(
-                    FetchDescriptor<MedicationRecord>(predicate: #Predicate { $0.childId == childId })
-                )) ?? []
+                let headers = csvRawRows.first?.map { $0.trimmingCharacters(in: .whitespaces) } ?? []
+                let unresolved = importer.detectUnresolvedColumns(headers: headers, config: pendingConfig)
 
-                let deduped = importer.deduplicated(
-                    parseResult: parsed,
-                    existingTemperatureRecords: existingTemps,
-                    existingMedicationRecords: existingMeds
-                )
-
-                importPreviewResult = deduped
-                showImportPreview = true
-            } catch let error as CSVImportError {
-                importError = error.errorDescription
-                showImportError = true
+                if !unresolved.isEmpty {
+                    // 9.2 Show column mapping sheet
+                    showColumnMappingSheet = true
+                } else {
+                    proceedToValueDetection()
+                }
             } catch {
                 importError = error.localizedDescription
                 showImportError = true
             }
+        }
+    }
+
+    // 9.3 After column mapping: detect unresolved enum values
+    private func proceedToValueDetection() {
+        let importer = CSVImporter()
+        let aliasTable = ImportAliasTable()
+        let dataRows = Array(csvRawRows.dropFirst())
+        let headerRow = csvRawRows.first ?? []
+
+        var groups: [UnresolvedValueGroup] = []
+        let enumFields: [(field: String, displayName: String)] = [
+            ("record_type", "记录类型"),
+            ("method", "测量方式"),
+            ("medication_type", "药物类型"),
+        ]
+
+        for (i, header) in headerRow.enumerated() {
+            let trimmed = header.trimmingCharacters(in: .whitespaces)
+            // Skip columns with non-simple rules (compound/keyword)
+            guard let resolvedField = aliasTable.resolveColumnName(trimmed, config: pendingConfig) else { continue }
+            guard let fieldInfo = enumFields.first(where: { $0.field == resolvedField }) else { continue }
+
+            let unresolved = importer.detectUnresolvedValues(
+                rows: dataRows, columnIndex: i,
+                field: resolvedField, config: pendingConfig
+            )
+            if !unresolved.isEmpty {
+                groups.append(UnresolvedValueGroup(
+                    id: resolvedField,
+                    fieldDisplayName: fieldInfo.displayName,
+                    items: unresolved
+                ))
+            }
+        }
+
+        if !groups.isEmpty {
+            unresolvedValueGroups = groups
+            showValueMappingSheet = true
+        } else {
+            proceedToParse()
+        }
+    }
+
+    // 9.4 After value mapping: full parse + dedup + preview
+    private func proceedToParse() {
+        guard let child = selectedChild else { return }
+        let importer = CSVImporter()
+        do {
+            let parsed = try importer.parseRows(csvRawRows, childId: child.id, config: pendingConfig)
+
+            let childId = child.id
+            let existingTemps = (try? modelContext.fetch(
+                FetchDescriptor<TemperatureRecord>(predicate: #Predicate { $0.childId == childId })
+            )) ?? []
+            let existingMeds = (try? modelContext.fetch(
+                FetchDescriptor<MedicationRecord>(predicate: #Predicate { $0.childId == childId })
+            )) ?? []
+
+            let deduped = importer.deduplicated(
+                parseResult: parsed,
+                existingTemperatureRecords: existingTemps,
+                existingMedicationRecords: existingMeds
+            )
+
+            importPreviewResult = deduped
+            showImportPreview = true
+        } catch let error as CSVImportError {
+            // 9.5 Row-level errors shown with Chinese column names
+            importError = error.errorDescription
+            showImportError = true
+        } catch {
+            importError = error.localizedDescription
+            showImportError = true
         }
     }
 
