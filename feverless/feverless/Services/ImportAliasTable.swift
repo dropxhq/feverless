@@ -12,6 +12,7 @@ struct ImportAliasTable {
         "数值":   "value",
         "测量方式": "method",
         "药物类型": "medication_type",
+        "药品":   "medication_type",
         "同步体温": "concurrent_temperature",
         "备注":   "notes",
     ]

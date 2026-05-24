@@ -296,14 +296,29 @@ struct CSVImporter {
                     temperatures.append(TemperatureReading(positionRaw: resolvedPosition, value: dbl))
 
                 case "medication":
-                    let resolvedMed = aliasTable.resolveValue(simpleMedType, forField: "medication_type", config: config) ?? "其他"
-                    if resolvedMed != simpleMedType && !simpleMedType.isEmpty {
-                        report.recordValueMapping(field: "medication_type", originalValue: simpleMedType)
+                    // Support "/" separator for new wide-format "药品" column
+                    let parts = simpleMedType.split(separator: "/", omittingEmptySubsequences: true)
+                        .map { $0.trimmingCharacters(in: .whitespaces) }
+                        .filter { !$0.isEmpty }
+                    for part in parts {
+                        let resolvedMed = aliasTable.resolveValue(part, forField: "medication_type", config: config) ?? part
+                        if resolvedMed != part { report.recordValueMapping(field: "medication_type", originalValue: part) }
+                        medications.append(MedicationUsage(medicationNameRaw: resolvedMed))
                     }
-                    medications.append(MedicationUsage(medicationNameRaw: resolvedMed))
 
                 default:
                     break
+                }
+            } else if !simpleMedType.isEmpty {
+                // New wide format: compound temperature columns present alongside a "药品" column.
+                // Process simpleMedType separately, supporting "/" separator for multiple medications.
+                let parts = simpleMedType.split(separator: "/", omittingEmptySubsequences: true)
+                    .map { $0.trimmingCharacters(in: .whitespaces) }
+                    .filter { !$0.isEmpty }
+                for part in parts {
+                    let resolvedMed = aliasTable.resolveValue(part, forField: "medication_type", config: config) ?? part
+                    if resolvedMed != part { report.recordValueMapping(field: "medication_type", originalValue: part) }
+                    medications.append(MedicationUsage(medicationNameRaw: resolvedMed))
                 }
             }
 
