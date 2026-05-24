@@ -240,6 +240,11 @@ struct ColumnMappingSheet: View {
             } else {
                 rule = .ignore
             }
+            // 1.1 Don't allow .ignore to overwrite an existing non-ignore rule
+            // (handles duplicate/empty column names: the first meaningful rule wins)
+            if case .ignore = rule, let existing = newConfig.columnMappings[entry.header] {
+                if case .ignore = existing { } else { continue }
+            }
             newConfig.columnMappings[entry.header] = rule
         }
         return newConfig

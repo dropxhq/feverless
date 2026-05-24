@@ -15,6 +15,7 @@ struct UnresolvedValueGroup: Identifiable {
 struct ValueMappingSheet: View {
     let valueGroups: [UnresolvedValueGroup]
     let config: ImportMappingConfig
+    let hasKeywordColumns: Bool
     let onDone: (ImportMappingConfig) -> Void
 
     @State private var localConfig: ImportMappingConfig
@@ -24,9 +25,10 @@ struct ValueMappingSheet: View {
 
     @Environment(\.dismiss) private var dismiss
 
-    init(valueGroups: [UnresolvedValueGroup], config: ImportMappingConfig, onDone: @escaping (ImportMappingConfig) -> Void) {
+    init(valueGroups: [UnresolvedValueGroup], config: ImportMappingConfig, hasKeywordColumns: Bool = false, onDone: @escaping (ImportMappingConfig) -> Void) {
         self.valueGroups = valueGroups
         self.config = config
+        self.hasKeywordColumns = hasKeywordColumns
         self.onDone = onDone
         _localConfig = State(initialValue: config)
     }
@@ -72,11 +74,13 @@ struct ValueMappingSheet: View {
                                 field: group.id
                             )
                         }
+                    }
+                }
 
-                        // 7.4 Keyword extension entry (drug type section only)
-                        if group.id == "medication_type" {
-                            addKeywordButton()
-                        }
+                // 3.2 Keyword configuration section (independent of enum groups)
+                if hasKeywordColumns {
+                    Section("药物关键词") {
+                        addKeywordButton()
                     }
                 }
             }

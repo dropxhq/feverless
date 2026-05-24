@@ -10,6 +10,7 @@ struct MedicationKeywordMatcher {
         let pairs: [(String, MedicationType)] = [
             // Longer keywords first to prevent partial matches
             ("对乙酰氨基酚", .acetaminophen),
+            ("对乙", .acetaminophen),
             ("acetaminophen", .acetaminophen),
             ("ibuprofen", .ibuprofen),
             ("扑热息痛", .acetaminophen),

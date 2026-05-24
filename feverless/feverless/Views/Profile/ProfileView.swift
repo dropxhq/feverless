@@ -37,6 +37,7 @@ struct ProfileView: View {
     @State private var showColumnMappingSheet = false
     @State private var showValueMappingSheet = false
     @State private var unresolvedValueGroups: [UnresolvedValueGroup] = []
+    @State private var hasKeywordColumns: Bool = false
 
     // Toast
     @State private var toastMessage: String?
@@ -151,7 +152,8 @@ struct ProfileView: View {
             .sheet(isPresented: $showValueMappingSheet) {
                 ValueMappingSheet(
                     valueGroups: unresolvedValueGroups,
-                    config: pendingConfig
+                    config: pendingConfig,
+                    hasKeywordColumns: hasKeywordColumns
                 ) { updatedConfig in
                     pendingConfig = updatedConfig
                     proceedToParse()
@@ -283,6 +285,17 @@ struct ProfileView: View {
 
         if !groups.isEmpty {
             unresolvedValueGroups = groups
+        }
+
+        // 2.1 Check if any column uses keyword extraction (regardless of enum groups)
+        let keywordColumnsExist = pendingConfig.columnMappings.values.contains {
+            if case .keywordExtract(_, let extracts) = $0 { return extracts }
+            return false
+        }
+        hasKeywordColumns = keywordColumnsExist
+
+        // 2.2 Show ValueMappingSheet if there are unresolved enum values OR keyword columns
+        if !groups.isEmpty || hasKeywordColumns {
             showValueMappingSheet = true
         } else {
             proceedToParse()
