@@ -28,6 +28,9 @@ struct FeverEpisode {
 struct FeverEpisodeDetector {
     /// Returns the current (ongoing) fever episode for the given records,
     /// or nil if no active episode exists.
+    /// An episode is considered ended if the last fever reading is older than 24 hours.
+    /// The episode start is determined by walking backwards: a gap > 12h between
+    /// consecutive fever readings marks the boundary of the current episode.
     static func currentEpisode(for records: [DataRecord]) -> FeverEpisode? {
         let feverReadings: [(value: Double, timestamp: Date)] = records.flatMap { record in
             record.temperatures.compactMap { reading in
@@ -38,9 +41,18 @@ struct FeverEpisodeDetector {
         guard let lastFever = feverReadings.last else { return nil }
 
         // Episode ends if the last fever record is older than 24 hours
-        let isOngoing = Date().timeIntervalSince(lastFever.timestamp) < 24 * 3600
-        guard isOngoing, let firstFever = feverReadings.first else { return nil }
+        guard Date().timeIntervalSince(lastFever.timestamp) < 24 * 3600 else { return nil }
 
-        return FeverEpisode(startDate: firstFever.timestamp, isOngoing: true)
+        // Find the start of THIS episode: walk backwards until a gap > 12h
+        var episodeStartIndex = 0
+        for i in stride(from: feverReadings.count - 1, through: 1, by: -1) {
+            let gap = feverReadings[i].timestamp.timeIntervalSince(feverReadings[i - 1].timestamp)
+            if gap > 12 * 3600 {
+                episodeStartIndex = i
+                break
+            }
+        }
+
+        return FeverEpisode(startDate: feverReadings[episodeStartIndex].timestamp, isOngoing: true)
     }
 }

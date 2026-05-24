@@ -69,6 +69,12 @@ struct ChartView: View {
         return "\(fmt.string(from: customStart))–\(fmt.string(from: customEnd))"
     }
 
+    private var feverEpisode: FeverEpisode? {
+        guard let child = selectedChild else { return nil }
+        let records = allRecords.filter { $0.childId == child.id }
+        return FeverEpisodeDetector.currentEpisode(for: records)
+    }
+
     // Flattened temperature readings with their parent record timestamps
     private struct TempPoint: Identifiable {
         let id = UUID()
@@ -136,23 +142,33 @@ struct ChartView: View {
     @ViewBuilder
     private var chartSection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            // Header with range selector
-            HStack {
+            // Header
+            VStack(alignment: .leading, spacing: 8) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("本次发烧")
-                        .font(.system(size: 15, weight: .bold))
-                    if let first = tempPoints.first {
-                        Text(
-                            first.timestamp.formatted(date: .abbreviated, time: .omitted)
-                            + " "
-                            + first.timestamp.formatted(date: .omitted, time: .shortened)
-                            + " 起"
-                        )
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
+                    if feverEpisode != nil {
+                        Text("本次发烧")
+                            .font(.system(size: 15, weight: .bold))
+                        if let episode = feverEpisode {
+                            Text(
+                                episode.startDate.formatted(date: .abbreviated, time: .omitted)
+                                + " "
+                                + episode.startDate.formatted(date: .omitted, time: .shortened)
+                                + " 起"
+                            )
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                        }
+                    } else {
+                        Text("体温记录")
+                            .font(.system(size: 15, weight: .bold))
+                        if let last = tempPoints.last {
+                            Text("最近记录：" + last.timestamp.formatted(date: .abbreviated, time: .shortened))
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
-                Spacer()
+
                 HStack(spacing: 4) {
                     ForEach(ChartTimeRange.allCases, id: \.self) { r in
                         Button {
@@ -178,6 +194,7 @@ struct ChartView: View {
                         )
                         .buttonStyle(.plain)
                     }
+                    Spacer()
                 }
             }
 
