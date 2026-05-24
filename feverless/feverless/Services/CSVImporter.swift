@@ -56,6 +56,7 @@ struct DateFormatDetector {
             make("yyyy-MM-dd'T'HH:mm:ssXXXXX"),
             make("yyyy-MM-dd'T'HH:mm:ss'Z'", tz: TimeZone(identifier: "UTC")),
             make("yyyy-MM-dd'T'HH:mm:ss",    tz: .current),
+            make("yyyy/MM/dd HH:mm:ss",        tz: .current),
             make("yyyy/MM/dd HH:mm",          tz: .current),
             make("yyyy-MM-dd",                tz: .current),
         ]
@@ -365,18 +366,26 @@ struct CSVImporter {
     }
 
     private func parseRFC4180(_ content: String) -> [[String]] {
+        // Normalize all line endings to \n before parsing.
+        // Swift's Character type treats \r\n as a single extended grapheme cluster,
+        // so it would never match "\r" or "\n" individually, causing the entire
+        // file to be parsed as one row when CRLF line endings are present.
+        let normalized = content
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+
         var rows: [[String]] = []
         var currentRow: [String] = []
         var currentField = ""
         var inQuotes = false
-        var i = content.startIndex
+        var i = normalized.startIndex
 
-        while i < content.endIndex {
-            let c = content[i]
+        while i < normalized.endIndex {
+            let c = normalized[i]
             if inQuotes {
                 if c == "\"" {
-                    let next = content.index(after: i)
-                    if next < content.endIndex && content[next] == "\"" {
+                    let next = normalized.index(after: i)
+                    if next < normalized.endIndex && normalized[next] == "\"" {
                         currentField.append("\"")
                         i = next
                     } else {
@@ -392,15 +401,6 @@ struct CSVImporter {
                 case ",":
                     currentRow.append(currentField)
                     currentField = ""
-                case "\r":
-                    currentRow.append(currentField)
-                    currentField = ""
-                    rows.append(currentRow)
-                    currentRow = []
-                    let next = content.index(after: i)
-                    if next < content.endIndex && content[next] == "\n" {
-                        i = next
-                    }
                 case "\n":
                     currentRow.append(currentField)
                     currentField = ""
@@ -410,7 +410,7 @@ struct CSVImporter {
                     currentField.append(c)
                 }
             }
-            i = content.index(after: i)
+            i = normalized.index(after: i)
         }
 
         if !currentField.isEmpty || !currentRow.isEmpty {

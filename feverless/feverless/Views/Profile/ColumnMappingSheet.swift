@@ -17,24 +17,23 @@ struct ColumnMappingSheet: View {
     // MARK: - Per-column state
 
     struct MappingEntry: Identifiable {
-        /// CSV column header
-        let id: String
+        /// Unique identifier (UUID) — avoids SwiftUI ForEach issues with duplicate header strings
+        let id = UUID()
+        /// CSV column header (display text)
+        let header: String
         /// Non-nil when the column can be auto-resolved (read-only in UI)
         let autoResolvedField: String?
         /// User-selected target internal field; nil = ignore
         var targetField: String?
         /// Compound: implied MeasurementMethod rawValue (when targetField == "value")
         var impliedMethod: String
-        /// Compound: implied record type (when targetField == "value")
-        var impliedRecordType: String
         /// Whether to extract medication keywords from this column
         var extractsMedications: Bool
 
         init(header: String, autoResolvedField: String?, existingRule: ColumnMappingRule?) {
-            self.id = header
+            self.header = header
             self.autoResolvedField = autoResolvedField
             self.impliedMethod = MeasurementMethod.axillary.rawValue
-            self.impliedRecordType = "temperature"
             self.extractsMedications = false
             self.targetField = autoResolvedField
 
@@ -45,7 +44,6 @@ struct ColumnMappingSheet: View {
                 case .compound(let f, let implied):
                     self.targetField = f
                     self.impliedMethod = implied["method"] ?? MeasurementMethod.axillary.rawValue
-                    self.impliedRecordType = implied["record_type"] ?? "temperature"
                 case .keywordExtract(let f, let extracts):
                     self.targetField = f
                     self.extractsMedications = extracts
@@ -59,13 +57,12 @@ struct ColumnMappingSheet: View {
     // MARK: - Target field options
 
     private let targetFieldOptions: [(id: String, displayName: String)] = [
-        (id: "timestamp",             displayName: "时间"),
-        (id: "record_type",           displayName: "记录类型"),
-        (id: "value",                 displayName: "数值"),
-        (id: "method",                displayName: "测量方式"),
-        (id: "medication_type",       displayName: "药物类型"),
-        (id: "concurrent_temperature", displayName: "同步体温"),
-        (id: "notes",                 displayName: "备注"),
+        (id: "timestamp",       displayName: "时间"),
+        (id: "record_type",     displayName: "记录类型"),
+        (id: "value",           displayName: "体温"),
+        (id: "method",          displayName: "测量方式"),
+        (id: "medication_type", displayName: "药物类型"),
+        (id: "notes",           displayName: "备注"),
     ]
 
     private func displayName(for field: String) -> String {
@@ -144,7 +141,7 @@ struct ColumnMappingSheet: View {
             // 6.2 Auto-resolved: show ✓ (read-only)
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(e.id).font(.headline)
+                    Text(e.header).font(.headline)
                     Text("→ \(displayName(for: resolvedField))")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -156,7 +153,7 @@ struct ColumnMappingSheet: View {
             // 6.2 Unresolved: show ! and picker
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Text(e.id).font(.headline)
+                    Text(e.header).font(.headline)
                     Spacer()
                     Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.orange)
                 }
@@ -171,10 +168,10 @@ struct ColumnMappingSheet: View {
                 }
                 .pickerStyle(.menu)
 
-                // 6.3 Compound inline expansion when "数值" is selected
+                // 6.3 Compound inline expansion when "体温" is selected
                 if entry.wrappedValue.targetField == "value" {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("同时固定以下字段：")
+                        Text("指定测量方式：")
                             .font(.caption)
                             .foregroundStyle(.secondary)
 
@@ -182,12 +179,6 @@ struct ColumnMappingSheet: View {
                             ForEach(MeasurementMethod.allCases, id: \.rawValue) { method in
                                 Text(method.displayName).tag(method.rawValue)
                             }
-                        }
-                        .pickerStyle(.menu)
-
-                        Picker("记录类型", selection: entry.impliedRecordType) {
-                            Text("体温").tag("temperature")
-                            Text("用药").tag("medication")
                         }
                         .pickerStyle(.menu)
                     }
@@ -236,7 +227,7 @@ struct ColumnMappingSheet: View {
                         field: field,
                         impliedValues: [
                             "method": entry.impliedMethod,
-                            "record_type": entry.impliedRecordType,
+                            "record_type": "temperature",
                         ]
                     )
                 } else if entry.extractsMedications {
@@ -249,7 +240,7 @@ struct ColumnMappingSheet: View {
             } else {
                 rule = .ignore
             }
-            newConfig.columnMappings[entry.id] = rule
+            newConfig.columnMappings[entry.header] = rule
         }
         return newConfig
     }

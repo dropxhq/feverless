@@ -175,7 +175,7 @@ struct ImportPreviewSheet: View {
     private let fieldDisplayNames: [String: String] = [
         "timestamp": "时间",
         "record_type": "记录类型",
-        "value": "数值",
+        "value": "体温",
         "method": "测量方式",
         "medication_type": "药物类型",
         "concurrent_temperature": "同步体温",
