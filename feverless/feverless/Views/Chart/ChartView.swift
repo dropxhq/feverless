@@ -598,7 +598,6 @@ struct ChartView: View {
                     }
                 }
             }
-            .sheet(isPresented: $showingCustomPicker) { customPickerSheet }
             .chartPlotStyle { $0.padding(.top, 26) }  // 为顶部 annotation 预留空间，防止溢出到按钮行
             .frame(height: 220)
             } // end if tempPoints.isEmpty
@@ -648,6 +647,7 @@ struct ChartView: View {
         .padding()
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
         .padding(.horizontal)
+        .sheet(isPresented: $showingCustomPicker) { customPickerSheet }
     }
 
     // MARK: Month grouping
