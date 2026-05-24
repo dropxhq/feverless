@@ -1,21 +1,9 @@
 //
 //  ProfileView.swift
 //  feverless
-//
 
 import SwiftUI
 import SwiftData
-import UniformTypeIdentifiers
-
-// MARK: - ValueMappingInput
-
-/// Data bundle used with .sheet(item:) to guarantee ValueMappingSheet always receives fresh data.
-struct ValueMappingInput: Identifiable {
-    let id = UUID()
-    let valueGroups: [UnresolvedValueGroup]
-    let config: ImportMappingConfig
-    let hasKeywordColumns: Bool
-}
 
 // MARK: - ProfileView
 
@@ -27,28 +15,6 @@ struct ProfileView: View {
     @Binding var selectedChildIdString: String
     @State private var showAddChild = false
     @State private var childToEdit: Child?
-
-    // 5.4 / 5.5 Export / Import state
-    @State private var childForExport: Child?
-    @State private var showFileImporter = false
-
-    // Import error alert
-    @State private var importError: String?
-    @State private var showImportError = false
-
-    // Import preview sheet
-    @State private var importPreviewResult: CSVParseResult? = nil
-
-    // Multi-step import flow state
-    @State private var csvRawRows: [[String]] = []
-    @State private var pendingConfig: ImportMappingConfig = ImportMappingConfig()
-    @State private var showColumnMappingSheet = false
-    @State private var valueMappingInput: ValueMappingInput? = nil
-    @State private var columnMappingDidComplete: Bool = false
-    @State private var valueMappingConfirmed: Bool = false
-
-    // Toast
-    @State private var toastMessage: String?
 
     private var selectedChild: Child? {
         guard let id = UUID(uuidString: selectedChildIdString) else { return nil }
@@ -77,27 +43,6 @@ struct ProfileView: View {
                         }
                 }
 
-                // 5.3 / 5.6 Data management section (hidden when no selected child)
-                if let child = selectedChild {
-                    Section("\(child.name) 的数据") {
-                        // 5.4 Export row
-                        Button {
-                            childForExport = child
-                        } label: {
-                            Label("导出数据...", systemImage: "square.and.arrow.up")
-                        }
-                        .foregroundStyle(.primary)
-
-                        // 5.5 Import row
-                        Button {
-                            showFileImporter = true
-                        } label: {
-                            Label("导入数据...", systemImage: "square.and.arrow.down")
-                        }
-                        .foregroundStyle(.primary)
-                    }
-                }
-
                 // 7.4 Medication management section
                 NavigationLink {
                     MedicationCatalogView()
@@ -121,78 +66,11 @@ struct ProfileView: View {
                     }
                 }
             }
-            // 4.7 Toast overlay
-            .overlay(alignment: .bottom) {
-                if let msg = toastMessage {
-                    Text(msg)
-                        .font(.subheadline)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .background(.regularMaterial, in: Capsule())
-                        .padding(.bottom, 20)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
-            }
-            .animation(.easeInOut(duration: 0.3), value: toastMessage)
             .sheet(isPresented: $showAddChild) {
                 AddChildView(onSave: nil)
             }
             .sheet(item: $childToEdit) { child in
                 EditChildView(child: child)
-            }
-            // 3.1 Export sheet
-            .sheet(item: $childForExport) { child in
-                ExportSheet(child: child)
-            }
-            // Import preview sheet
-            .sheet(item: $importPreviewResult) { result in
-                ImportPreviewSheet(parseResult: result, importConfig: pendingConfig) { count in
-                    showToast("已成功导入 \(count) 条记录")
-                }
-            }
-            // File importer
-            .fileImporter(
-                isPresented: $showFileImporter,
-                allowedContentTypes: [.commaSeparatedText]
-            ) { result in
-                handleFileImport(result: result)
-            }
-            // 9.2 Column mapping sheet
-            .sheet(isPresented: $showColumnMappingSheet, onDismiss: {
-                guard columnMappingDidComplete else { return }
-                columnMappingDidComplete = false
-                proceedToValueDetection()
-            }) {
-                ColumnMappingSheet(
-                    allHeaders: csvRawRows.first?.map { $0.trimmingCharacters(in: .whitespaces) } ?? [],
-                    config: pendingConfig
-                ) { updatedConfig in
-                    pendingConfig = updatedConfig
-                    columnMappingDidComplete = true
-                }
-            }
-            // 9.3 Value mapping sheet — uses sheet(item:) so data is always fresh
-            // proceedToParse() is deferred to onDismiss to avoid presenting two sheets simultaneously
-            .sheet(item: $valueMappingInput, onDismiss: {
-                guard valueMappingConfirmed else { return }
-                valueMappingConfirmed = false
-                proceedToParse()
-            }) { input in
-                ValueMappingSheet(
-                    valueGroups: input.valueGroups,
-                    config: input.config,
-                    hasKeywordColumns: input.hasKeywordColumns
-                ) { updatedConfig in
-                    pendingConfig = updatedConfig
-                    valueMappingConfirmed = true
-                    valueMappingInput = nil
-                }
-            }
-            // Import error alert
-            .alert("导入失败", isPresented: $showImportError) {
-                Button("好") {}
-            } message: {
-                Text(importError ?? "未知错误")
             }
         }
     }
@@ -207,13 +85,11 @@ struct ProfileView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(child.name)
                     .font(.headline)
-                // 5.1 Latest temperature subtitle
                 Text(latestTempSubtitle(for: child))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            // 5.2 Selected child highlight
             if selectedChildIdString == child.id.uuidString {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(.blue)
@@ -251,124 +127,6 @@ struct ProfileView: View {
     }
 
     // MARK: - Import flow
-
-    // 9.1 Entry point: load saved config, read raw rows, detect unresolved columns
-    private func handleFileImport(result: Result<URL, Error>) {
-        guard selectedChild != nil else { return }
-        switch result {
-        case .failure:
-            break
-        case .success(let url):
-            do {
-                let importer = CSVImporter()
-                csvRawRows = try importer.readRawRows(url: url)
-                pendingConfig = ImportConfigStore.load()
-
-                let headers = csvRawRows.first?.map { $0.trimmingCharacters(in: .whitespaces) } ?? []
-                let unresolved = importer.detectUnresolvedColumns(headers: headers, config: pendingConfig)
-
-                if !unresolved.isEmpty {
-                    // 9.2 Show column mapping sheet
-                    showColumnMappingSheet = true
-                } else {
-                    proceedToValueDetection()
-                }
-            } catch {
-                importError = error.localizedDescription
-                showImportError = true
-            }
-        }
-    }
-
-    // 9.3 After column mapping: detect unresolved enum values
-    private func proceedToValueDetection() {
-        let importer = CSVImporter()
-        let aliasTable = ImportAliasTable()
-        let dataRows = Array(csvRawRows.dropFirst())
-        let headerRow = csvRawRows.first ?? []
-
-        var groups: [UnresolvedValueGroup] = []
-        let enumFields: [(field: String, displayName: String)] = [
-            ("record_type", "记录类型"),
-            ("method", "测量方式"),
-            ("medication_type", "药物类型"),
-        ]
-
-        for (i, header) in headerRow.enumerated() {
-            let trimmed = header.trimmingCharacters(in: .whitespaces)
-            // Skip columns with non-simple rules (compound/keyword)
-            guard let resolvedField = aliasTable.resolveColumnName(trimmed, config: pendingConfig) else { continue }
-            guard let fieldInfo = enumFields.first(where: { $0.field == resolvedField }) else { continue }
-
-            let unresolved = importer.detectUnresolvedValues(
-                rows: dataRows, columnIndex: i,
-                field: resolvedField, config: pendingConfig
-            )
-            if !unresolved.isEmpty {
-                groups.append(UnresolvedValueGroup(
-                    id: resolvedField,
-                    fieldDisplayName: fieldInfo.displayName,
-                    items: unresolved
-                ))
-            }
-        }
-
-        // 2.1 Check if any column uses keyword extraction (regardless of enum groups)
-        let keywordColumnsExist = pendingConfig.columnMappings.values.contains {
-            if case .keywordExtract(_, let extracts) = $0 { return extracts }
-            return false
-        }
-
-        // 2.2 Show ValueMappingSheet if there are unresolved enum values OR keyword columns
-        // Use sheet(item:) to bind data directly to the sheet, avoiding stale-state timing issues
-        if !groups.isEmpty || keywordColumnsExist {
-            valueMappingInput = ValueMappingInput(
-                valueGroups: groups,
-                config: pendingConfig,
-                hasKeywordColumns: keywordColumnsExist
-            )
-        } else {
-            proceedToParse()
-        }
-    }
-
-    // 9.4 After value mapping: full parse + dedup + preview
-    private func proceedToParse() {
-        guard let child = selectedChild else { return }
-        let importer = CSVImporter()
-        do {
-            let parsed = try importer.parseRows(csvRawRows, childId: child.id, config: pendingConfig)
-
-            let childId = child.id
-            let existingRecords = (try? modelContext.fetch(
-                FetchDescriptor<DataRecord>(predicate: #Predicate { $0.childId == childId })
-            )) ?? []
-
-            let deduped = importer.deduplicated(
-                parseResult: parsed,
-                existingRecords: existingRecords
-            )
-
-            importPreviewResult = deduped
-        } catch let error as CSVImportError {
-            // 9.5 Row-level errors shown with Chinese column names
-            importError = error.errorDescription
-            showImportError = true
-        } catch {
-            importError = error.localizedDescription
-            showImportError = true
-        }
-    }
-
-    // MARK: - 4.7 Toast
-
-    private func showToast(_ message: String) {
-        toastMessage = message
-        Task {
-            try? await Task.sleep(nanoseconds: 2_500_000_000)
-            toastMessage = nil
-        }
-    }
 
     // MARK: - Delete child
 

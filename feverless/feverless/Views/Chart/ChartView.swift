@@ -6,6 +6,7 @@
 import SwiftUI
 import SwiftData
 import Charts
+import UniformTypeIdentifiers
 
 enum ChartTimeRange: String, CaseIterable {
     case today     = "今天"
@@ -42,6 +43,7 @@ enum ChartTimeRange: String, CaseIterable {
 }
 
 struct ChartView: View {
+    @Environment(\.modelContext) private var modelContext
     @Query(sort: \DataRecord.timestamp) private var allRecords: [DataRecord]
     @ObservedObject private var catalog = MedicationCatalog.shared
 
@@ -50,6 +52,20 @@ struct ChartView: View {
     @State private var customStart: Date = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date()
     @State private var customEnd: Date = Date()
     @State private var showingCustomPicker = false
+
+    // Import / Export state
+    @State private var childForExport: Child?
+    @State private var showFileImporter = false
+    @State private var importError: String?
+    @State private var showImportError = false
+    @State private var importPreviewResult: CSVParseResult? = nil
+    @State private var csvRawRows: [[String]] = []
+    @State private var pendingConfig: ImportMappingConfig = ImportMappingConfig()
+    @State private var showColumnMappingSheet = false
+    @State private var valueMappingInput: ValueMappingInput? = nil
+    @State private var columnMappingDidComplete: Bool = false
+    @State private var valueMappingConfirmed: Bool = false
+    @State private var toastMessage: String?
 
     private var range: (start: Date, end: Date) {
         timeRange == .custom
@@ -128,12 +144,91 @@ struct ChartView: View {
             ScrollView {
                 VStack(spacing: 16) {
                     chartSection
-
                     recordsListSection
                 }
                 .padding(.bottom, 32)
             }
             .navigationTitle("图表")
+            .toolbar {
+                ToolbarItem(placement: .automatic) {
+                    Menu {
+                        Button {
+                            if let child = selectedChild { childForExport = child }
+                        } label: {
+                            Label("导出数据...", systemImage: "square.and.arrow.up")
+                        }
+                        .disabled(selectedChild == nil)
+
+                        Button {
+                            showFileImporter = true
+                        } label: {
+                            Label("导入数据...", systemImage: "square.and.arrow.down")
+                        }
+                        .disabled(selectedChild == nil)
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                    }
+                }
+            }
+            .overlay(alignment: .bottom) {
+                if let msg = toastMessage {
+                    Text(msg)
+                        .font(.subheadline)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(.regularMaterial, in: Capsule())
+                        .padding(.bottom, 20)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .animation(.easeInOut(duration: 0.3), value: toastMessage)
+            .sheet(item: $childForExport) { child in
+                ExportSheet(child: child)
+            }
+            .sheet(item: $importPreviewResult) { result in
+                ImportPreviewSheet(parseResult: result, importConfig: pendingConfig) { count in
+                    showToast("已成功导入 \(count) 条记录")
+                }
+            }
+            .fileImporter(
+                isPresented: $showFileImporter,
+                allowedContentTypes: [.commaSeparatedText]
+            ) { result in
+                handleFileImport(result: result)
+            }
+            .sheet(isPresented: $showColumnMappingSheet, onDismiss: {
+                guard columnMappingDidComplete else { return }
+                columnMappingDidComplete = false
+                proceedToValueDetection()
+            }) {
+                ColumnMappingSheet(
+                    allHeaders: csvRawRows.first?.map { $0.trimmingCharacters(in: .whitespaces) } ?? [],
+                    config: pendingConfig
+                ) { updatedConfig in
+                    pendingConfig = updatedConfig
+                    columnMappingDidComplete = true
+                }
+            }
+            .sheet(item: $valueMappingInput, onDismiss: {
+                guard valueMappingConfirmed else { return }
+                valueMappingConfirmed = false
+                proceedToParse()
+            }) { input in
+                ValueMappingSheet(
+                    valueGroups: input.valueGroups,
+                    config: input.config,
+                    hasKeywordColumns: input.hasKeywordColumns
+                ) { updatedConfig in
+                    pendingConfig = updatedConfig
+                    valueMappingConfirmed = true
+                    valueMappingInput = nil
+                }
+            }
+            .alert("导入失败", isPresented: $showImportError) {
+                Button("好") {}
+            } message: {
+                Text(importError ?? "未知错误")
+            }
         }
     }
 
@@ -507,6 +602,102 @@ struct ChartView: View {
             }
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
             .padding(.horizontal)
+        }
+    }
+
+    // MARK: Import flow
+
+    private func handleFileImport(result: Result<URL, Error>) {
+        guard selectedChild != nil else { return }
+        switch result {
+        case .failure:
+            break
+        case .success(let url):
+            do {
+                let importer = CSVImporter()
+                csvRawRows = try importer.readRawRows(url: url)
+                pendingConfig = ImportConfigStore.load()
+                let headers = csvRawRows.first?.map { $0.trimmingCharacters(in: .whitespaces) } ?? []
+                let unresolved = importer.detectUnresolvedColumns(headers: headers, config: pendingConfig)
+                if !unresolved.isEmpty {
+                    showColumnMappingSheet = true
+                } else {
+                    proceedToValueDetection()
+                }
+            } catch {
+                importError = error.localizedDescription
+                showImportError = true
+            }
+        }
+    }
+
+    private func proceedToValueDetection() {
+        let importer = CSVImporter()
+        let aliasTable = ImportAliasTable()
+        let dataRows = Array(csvRawRows.dropFirst())
+        let headerRow = csvRawRows.first ?? []
+        var groups: [UnresolvedValueGroup] = []
+        let enumFields: [(field: String, displayName: String)] = [
+            ("record_type", "记录类型"),
+            ("method", "测量方式"),
+            ("medication_type", "药物类型"),
+        ]
+        for (i, header) in headerRow.enumerated() {
+            let trimmed = header.trimmingCharacters(in: .whitespaces)
+            guard let resolvedField = aliasTable.resolveColumnName(trimmed, config: pendingConfig) else { continue }
+            guard let fieldInfo = enumFields.first(where: { $0.field == resolvedField }) else { continue }
+            let unresolved = importer.detectUnresolvedValues(
+                rows: dataRows, columnIndex: i,
+                field: resolvedField, config: pendingConfig
+            )
+            if !unresolved.isEmpty {
+                groups.append(UnresolvedValueGroup(
+                    id: resolvedField,
+                    fieldDisplayName: fieldInfo.displayName,
+                    items: unresolved
+                ))
+            }
+        }
+        let keywordColumnsExist = pendingConfig.columnMappings.values.contains {
+            if case .keywordExtract(_, let extracts) = $0 { return extracts }
+            return false
+        }
+        if !groups.isEmpty || keywordColumnsExist {
+            valueMappingInput = ValueMappingInput(
+                valueGroups: groups,
+                config: pendingConfig,
+                hasKeywordColumns: keywordColumnsExist
+            )
+        } else {
+            proceedToParse()
+        }
+    }
+
+    private func proceedToParse() {
+        guard let child = selectedChild else { return }
+        let importer = CSVImporter()
+        do {
+            let parsed = try importer.parseRows(csvRawRows, childId: child.id, config: pendingConfig)
+            let childId = child.id
+            let existingRecords = (try? modelContext.fetch(
+                FetchDescriptor<DataRecord>(predicate: #Predicate { $0.childId == childId })
+            )) ?? []
+            let deduped = importer.deduplicated(parseResult: parsed, existingRecords: existingRecords)
+            importPreviewResult = deduped
+        } catch let error as CSVImportError {
+            importError = error.errorDescription
+            showImportError = true
+        } catch {
+            importError = error.localizedDescription
+            showImportError = true
+        }
+    }
+
+    private func showToast(_ message: String) {
+        toastMessage = message
+        Task {
+            try? await Task.sleep(nanoseconds: 2_500_000_000)
+            toastMessage = nil
         }
     }
 }

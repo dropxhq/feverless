@@ -8,6 +8,16 @@ struct UnresolvedValueGroup: Identifiable {
     var items: [(value: String, count: Int)]
 }
 
+// MARK: - ValueMappingInput
+
+/// Data bundle used with .sheet(item:) to guarantee ValueMappingSheet always receives fresh data.
+struct ValueMappingInput: Identifiable {
+    let id = UUID()
+    let valueGroups: [UnresolvedValueGroup]
+    let config: ImportMappingConfig
+    let hasKeywordColumns: Bool
+}
+
 // MARK: - ValueMappingSheet
 
 /// Displays unrecognized enum values grouped by field and lets the user map them
