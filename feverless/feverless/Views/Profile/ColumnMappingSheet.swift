@@ -132,10 +132,10 @@ struct ColumnMappingSheet: View {
             HStack {
                 Text(e.header).font(.headline)
                 Spacer()
-                if e.autoResolvedField != nil {
+                if e.targetField != nil {
                     Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
                 } else {
-                    Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.orange)
+                    Image(systemName: "minus.circle").foregroundStyle(.secondary)
                 }
             }
 
