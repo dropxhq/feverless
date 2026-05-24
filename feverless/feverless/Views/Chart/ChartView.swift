@@ -192,11 +192,13 @@ struct ChartView: View {
                         y: .value("体温", point.value)
                     )
                     .foregroundStyle(Color.red)
-                    .symbolSize(50)
+                    .symbolSize(tempPoints.count > 20 ? 20 : 50)
                     .annotation(position: .top, spacing: 4) {
-                        Text(String(format: "%.1f", point.value))
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(point.isFever ? Color.red : Color.secondary)
+                        if tempPoints.count <= 20 {
+                            Text(String(format: "%.1f", point.value))
+                                .font(.system(size: 9, weight: .semibold))
+                                .foregroundStyle(point.isFever ? Color.red : Color.secondary)
+                        }
                     }
                 }
 
@@ -227,15 +229,17 @@ struct ChartView: View {
                         .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [3, 3]))
                         .foregroundStyle(medColor.opacity(0.6))
                         .annotation(position: .top, spacing: 4) {
-                            HStack(spacing: 2) {
-                                Text(MedicationCatalog.shared.emoji(for: point.medicationNameRaw)).font(.system(size: 8))
-                                Text(point.medicationNameRaw)
-                                    .font(.system(size: 8, weight: .semibold))
-                                    .foregroundStyle(medColor)
+                            if tempPoints.count <= 20 {
+                                HStack(spacing: 2) {
+                                    Text(MedicationCatalog.shared.emoji(for: point.medicationNameRaw)).font(.system(size: 8))
+                                    Text(point.medicationNameRaw)
+                                        .font(.system(size: 8, weight: .semibold))
+                                        .foregroundStyle(medColor)
+                                }
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 2)
+                                .background(Capsule().fill(medColor.opacity(0.15)))
                             }
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 2)
-                            .background(Capsule().fill(medColor.opacity(0.15)))
                         }
                 }
             }
@@ -279,6 +283,35 @@ struct ChartView: View {
         .padding(.horizontal)
     }
 
+    // MARK: Month grouping
+
+    private struct MonthGroup: Identifiable {
+        let id: String          // "yyyy-MM"
+        let header: String      // "2026年5月"
+        let items: [AnyRecentRecord]
+    }
+
+    private var groupedRecords: [MonthGroup] {
+        let items = combinedRecords
+        let cal = Calendar.current
+        let fmt = DateFormatter()
+        fmt.dateFormat = "yyyy年M月"
+        var groups: [MonthGroup] = []
+        var indexMap: [String: Int] = [:]
+        for item in items {
+            let comps = cal.dateComponents([.year, .month], from: item.date)
+            let key = String(format: "%04d-%02d", comps.year!, comps.month!)
+            if let idx = indexMap[key] {
+                let g = groups[idx]
+                groups[idx] = MonthGroup(id: g.id, header: g.header, items: g.items + [item])
+            } else {
+                indexMap[key] = groups.count
+                groups.append(MonthGroup(id: key, header: fmt.string(from: item.date), items: [item]))
+            }
+        }
+        return groups
+    }
+
     private var yDomain: ClosedRange<Double> {
         let vals = tempPoints.map { $0.value }
         let lo = (vals.min() ?? 36.0) - 0.5
@@ -290,8 +323,8 @@ struct ChartView: View {
 
     @ViewBuilder
     private var recordsListSection: some View {
-        let items = combinedRecords
-        if !items.isEmpty {
+        let groups = groupedRecords
+        if !groups.isEmpty {
             VStack(alignment: .leading, spacing: 0) {
                 Text("记录明细")
                     .font(.system(size: 13, weight: .semibold))
@@ -299,65 +332,85 @@ struct ChartView: View {
                     .padding(.horizontal)
                     .padding(.vertical, 12)
 
-                ForEach(Array(items.enumerated()), id: \.offset) { index, item in
-                    HStack(spacing: 12) {
-                        switch item {
-                        case .temperature(let record, let reading):
-                            let isFever = reading.isFever()
-                            RoundedRectangle(cornerRadius: 10)
-                                .fill(isFever ? Color.red.opacity(0.08) : Color.green.opacity(0.1))
-                                .frame(width: 34, height: 34)
-                                .overlay(
-                                    Image(systemName: "thermometer.medium")
-                                        .font(.system(size: 14))
-                                        .foregroundStyle(isFever ? Color.red : Color.green)
-                                )
-                            VStack(alignment: .leading, spacing: 2) {
-                                HStack(spacing: 4) {
-                                    Text(String(format: "%.1f°C", reading.value))
-                                        .font(.system(size: 14, weight: .semibold))
-                                        .foregroundStyle(isFever ? Color.red : Color.primary)
-                                    Text("· " + reading.positionRaw)
+                ForEach(groups) { group in
+                    // Month header — only show when viewing multiple months
+                    if groups.count > 1 {
+                        HStack {
+                            Text(group.header)
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                        }
+                        .padding(.horizontal)
+                        .padding(.top, 8)
+                        .padding(.bottom, 4)
+                        .background(Color(.systemGroupedBackground).opacity(0.6))
+                    }
+
+                    ForEach(Array(group.items.enumerated()), id: \.offset) { index, item in
+                        HStack(spacing: 12) {
+                            switch item {
+                            case .temperature(let record, let reading):
+                                let isFever = reading.isFever()
+                                RoundedRectangle(cornerRadius: 10)
+                                    .fill(isFever ? Color.red.opacity(0.08) : Color.green.opacity(0.1))
+                                    .frame(width: 34, height: 34)
+                                    .overlay(
+                                        Image(systemName: "thermometer.medium")
+                                            .font(.system(size: 14))
+                                            .foregroundStyle(isFever ? Color.red : Color.green)
+                                    )
+                                VStack(alignment: .leading, spacing: 2) {
+                                    HStack(spacing: 4) {
+                                        Text(String(format: "%.1f°C", reading.value))
+                                            .font(.system(size: 14, weight: .semibold))
+                                            .foregroundStyle(isFever ? Color.red : Color.primary)
+                                        Text("· " + reading.positionRaw)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                        if isFever {
+                                            Text(reading.value >= 39.0 ? "高烧" : "发烧")
+                                                .font(.system(size: 11, weight: .semibold))
+                                                .foregroundStyle(Color.red)
+                                                .padding(.horizontal, 7)
+                                                .padding(.vertical, 2)
+                                                .background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+                                        }
+                                    }
+                                    Text(record.timestamp.formatted(date: .abbreviated, time: .shortened))
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
-                                    if isFever {
-                                        Text(reading.value >= 39.0 ? "高烧" : "发烧")
-                                            .font(.system(size: 11, weight: .semibold))
-                                            .foregroundStyle(Color.red)
-                                            .padding(.horizontal, 7)
-                                            .padding(.vertical, 2)
-                                            .background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
-                                    }
                                 }
-                                Text(record.timestamp.formatted(date: .abbreviated, time: .shortened))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
 
-                        case .medication(let record, let usage):
-                            RoundedRectangle(cornerRadius: 10)
-                                .fill(MedicationCatalog.shared.color(for: usage.medicationNameRaw).opacity(0.12))
-                                .frame(width: 34, height: 34)
-                                .overlay(
-                                    Image(systemName: "pill.fill")
-                                        .font(.system(size: 14))
-                                        .foregroundStyle(MedicationCatalog.shared.color(for: usage.medicationNameRaw))
-                                )
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(usage.medicationNameRaw)
-                                    .font(.system(size: 14, weight: .semibold))
-                                Text(record.timestamp.formatted(date: .abbreviated, time: .shortened))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                            case .medication(let record, let usage):
+                                RoundedRectangle(cornerRadius: 10)
+                                    .fill(MedicationCatalog.shared.color(for: usage.medicationNameRaw).opacity(0.12))
+                                    .frame(width: 34, height: 34)
+                                    .overlay(
+                                        Image(systemName: "pill.fill")
+                                            .font(.system(size: 14))
+                                            .foregroundStyle(MedicationCatalog.shared.color(for: usage.medicationNameRaw))
+                                    )
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(usage.medicationNameRaw)
+                                        .font(.system(size: 14, weight: .semibold))
+                                    Text(record.timestamp.formatted(date: .abbreviated, time: .shortened))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
                             }
+                            Spacer()
                         }
-                        Spacer()
-                    }
-                    .padding(.vertical, 10)
-                    .padding(.horizontal)
+                        .padding(.vertical, 10)
+                        .padding(.horizontal)
 
-                    if index < items.count - 1 {
-                        Divider().padding(.leading, 62)
+                        if index < group.items.count - 1 {
+                            Divider().padding(.leading, 62)
+                        }
+                    }
+
+                    if group.id != groups.last?.id {
+                        Divider()
                     }
                 }
             }
