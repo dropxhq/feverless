@@ -21,7 +21,8 @@ enum CSVImportError: LocalizedError {
 
 // MARK: - 1.5 Parse result (extended with mappingReport)
 
-struct CSVParseResult {
+struct CSVParseResult: Identifiable {
+    let id = UUID()
     let records: [DataRecord]
     let skippedCount: Int
     var mappingReport: ImportMappingReport

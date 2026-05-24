@@ -37,8 +37,7 @@ struct ProfileView: View {
     @State private var showImportError = false
 
     // Import preview sheet
-    @State private var importPreviewResult: CSVParseResult?
-    @State private var showImportPreview = false
+    @State private var importPreviewResult: CSVParseResult? = nil
 
     // Multi-step import flow state
     @State private var csvRawRows: [[String]] = []
@@ -46,6 +45,7 @@ struct ProfileView: View {
     @State private var showColumnMappingSheet = false
     @State private var valueMappingInput: ValueMappingInput? = nil
     @State private var columnMappingDidComplete: Bool = false
+    @State private var valueMappingConfirmed: Bool = false
 
     // Toast
     @State private var toastMessage: String?
@@ -145,11 +145,9 @@ struct ProfileView: View {
                 ExportSheet(child: child)
             }
             // Import preview sheet
-            .sheet(isPresented: $showImportPreview) {
-                if let result = importPreviewResult {
-                    ImportPreviewSheet(parseResult: result, importConfig: pendingConfig) { count in
-                        showToast("已成功导入 \(count) 条记录")
-                    }
+            .sheet(item: $importPreviewResult) { result in
+                ImportPreviewSheet(parseResult: result, importConfig: pendingConfig) { count in
+                    showToast("已成功导入 \(count) 条记录")
                 }
             }
             // File importer
@@ -174,15 +172,20 @@ struct ProfileView: View {
                 }
             }
             // 9.3 Value mapping sheet — uses sheet(item:) so data is always fresh
-            .sheet(item: $valueMappingInput) { input in
+            // proceedToParse() is deferred to onDismiss to avoid presenting two sheets simultaneously
+            .sheet(item: $valueMappingInput, onDismiss: {
+                guard valueMappingConfirmed else { return }
+                valueMappingConfirmed = false
+                proceedToParse()
+            }) { input in
                 ValueMappingSheet(
                     valueGroups: input.valueGroups,
                     config: input.config,
                     hasKeywordColumns: input.hasKeywordColumns
                 ) { updatedConfig in
                     pendingConfig = updatedConfig
+                    valueMappingConfirmed = true
                     valueMappingInput = nil
-                    proceedToParse()
                 }
             }
             // Import error alert
@@ -347,7 +350,6 @@ struct ProfileView: View {
             )
 
             importPreviewResult = deduped
-            showImportPreview = true
         } catch let error as CSVImportError {
             // 9.5 Row-level errors shown with Chinese column names
             importError = error.errorDescription
