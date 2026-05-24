@@ -76,8 +76,12 @@ struct ChartView: View {
     private var axisSpanDays: Int {
         Calendar.current.dateComponents([.day], from: range.start, to: range.end).day ?? 0
     }
+    private var axisSpanMonths: Int {
+        Calendar.current.dateComponents([.month], from: range.start, to: range.end).month ?? 0
+    }
     private var useAxisDateOnly: Bool { axisSpanDays > 14 }
     private var useAxisMultiDay: Bool { axisSpanDays > 1 }
+    private var useMonthlyAggregation: Bool { axisSpanMonths > 6 }
 
     private var customRangeLabel: String {
         let fmt = DateFormatter()
@@ -126,28 +130,45 @@ struct ChartView: View {
             .sorted { $0.timestamp < $1.timestamp }
     }
 
-    // 数据量超过阈值时，chart 切换到按日聚合视图以减少 GPU mark 数量
+    // 数据量超过阈值时，chart 切换到聚合视图以减少 GPU mark 数量
     private let chartPointThreshold = 80
 
-    private var useAggregatedChart: Bool { tempPoints.count > chartPointThreshold }
+    private var useAggregatedChart: Bool { useMonthlyAggregation || tempPoints.count > chartPointThreshold }
 
-    /// 用于图表渲染的体温点：数据量大时聚合为每日最高体温
+    /// 用于图表渲染的体温点：
+    /// - 超过 6 个月 → 每月最高体温
+    /// - 超过阈值点数 → 每日最高体温
     private var chartTempPoints: [TempPoint] {
-        guard useAggregatedChart else { return tempPoints }
         let cal = Calendar.current
-        var byDay: [Date: TempPoint] = [:]
-        for pt in tempPoints {
-            let day = cal.startOfDay(for: pt.timestamp)
-            if let existing = byDay[day] {
-                if pt.value > existing.value { byDay[day] = pt }
-            } else {
-                byDay[day] = pt
+        if useMonthlyAggregation {
+            var byMonth: [Date: TempPoint] = [:]
+            for pt in tempPoints {
+                let comps = cal.dateComponents([.year, .month], from: pt.timestamp)
+                let key = cal.date(from: comps)!
+                if let existing = byMonth[key] {
+                    if pt.value > existing.value { byMonth[key] = pt }
+                } else {
+                    byMonth[key] = pt
+                }
             }
+            return byMonth.values.sorted { $0.timestamp < $1.timestamp }
+        } else if tempPoints.count > chartPointThreshold {
+            var byDay: [Date: TempPoint] = [:]
+            for pt in tempPoints {
+                let day = cal.startOfDay(for: pt.timestamp)
+                if let existing = byDay[day] {
+                    if pt.value > existing.value { byDay[day] = pt }
+                } else {
+                    byDay[day] = pt
+                }
+            }
+            return byDay.values.sorted { $0.timestamp < $1.timestamp }
+        } else {
+            return tempPoints
         }
-        return byDay.values.sorted { $0.timestamp < $1.timestamp }
     }
 
-    /// 数据量大时每天只保留第一条用药记录，避免 GPU surface 超限
+    /// 超阈值时每天只保留第一条用药记录，避免 GPU surface 超限
     private var chartMedPoints: [MedPoint] {
         guard useAggregatedChart else { return medPoints }
         let cal = Calendar.current
@@ -439,14 +460,23 @@ struct ChartView: View {
                 }
             }
             .chartXAxis {
-                AxisMarks(values: .automatic(desiredCount: 5)) { _ in
-                    AxisGridLine()
-                    if useAxisDateOnly {
-                        AxisValueLabel(format: .dateTime.year().month().day())
-                    } else if useAxisMultiDay {
-                        AxisValueLabel(format: .dateTime.month().day().hour())
-                    } else {
-                        AxisValueLabel(format: .dateTime.hour().minute())
+                if useMonthlyAggregation {
+                    // 月度视图：每月一个刻度，仅显示月份（跨年时加年份）
+                    AxisMarks(values: .stride(by: .month)) { _ in
+                        AxisGridLine()
+                        AxisValueLabel(format: .dateTime.month(.abbreviated))
+                    }
+                } else {
+                    AxisMarks(values: .automatic(desiredCount: axisSpanDays > 30 ? 4 : 5)) { _ in
+                        AxisGridLine()
+                        if useAxisDateOnly {
+                            // 超 14 天：简短 M/d 格式，避免重叠
+                            AxisValueLabel(format: .dateTime.month().day())
+                        } else if useAxisMultiDay {
+                            AxisValueLabel(format: .dateTime.month().day().hour())
+                        } else {
+                            AxisValueLabel(format: .dateTime.hour().minute())
+                        }
                     }
                 }
             }
@@ -477,7 +507,7 @@ struct ChartView: View {
 
             // 聚合模式提示
             if useAggregatedChart {
-                Text("数据点较多，图表显示每日最高体温")
+                Text(useMonthlyAggregation ? "数据跨度超过 6 个月，图表显示每月最高体温" : "数据点较多，图表显示每日最高体温")
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
