@@ -635,9 +635,8 @@ struct ChartView: View {
         let headerRow = csvRawRows.first ?? []
         var groups: [UnresolvedValueGroup] = []
         let enumFields: [(field: String, displayName: String)] = [
-            ("record_type", "记录类型"),
             ("method", "测量方式"),
-            ("medication_type", "药物类型"),
+            ("medication_type", "药品列"),
         ]
         for (i, header) in headerRow.enumerated() {
             let trimmed = header.trimmingCharacters(in: .whitespaces)

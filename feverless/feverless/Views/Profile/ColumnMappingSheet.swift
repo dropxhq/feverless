@@ -58,9 +58,8 @@ struct ColumnMappingSheet: View {
 
     private let targetFieldOptions: [(id: String, displayName: String)] = [
         (id: "timestamp",       displayName: "时间"),
-        (id: "record_type",     displayName: "记录类型"),
         (id: "value",           displayName: "体温列"),
-        (id: "medication_type", displayName: "药物类型"),
+        (id: "medication_type", displayName: "药品列"),
         (id: "notes",           displayName: "备注"),
     ]
 
@@ -77,17 +76,8 @@ struct ColumnMappingSheet: View {
         let hasTimestamp = entries.contains { e in
             e.autoResolvedField == "timestamp" || e.targetField == "timestamp"
         }
-        let hasRecordType = entries.contains { e in
-            if e.autoResolvedField == "record_type" { return true }
-            if e.targetField == "record_type" { return true }
-            // Compound value columns (user-selected or auto-resolved via position keyword) cover record_type
-            if e.targetField == "value" { return true }
-            if e.autoResolvedField == "value" { return true }
-            return false
-        }
 
         if !hasTimestamp { missing.append("时间") }
-        if !hasRecordType { missing.append("记录类型") }
         return missing
     }
 
