@@ -146,30 +146,11 @@ struct ChartView: View {
                     chartSection
                     recordsListSection
                 }
+                .padding(.top, 8)
                 .padding(.bottom, 32)
             }
             .navigationTitle("图表")
-            .toolbar {
-                ToolbarItem(placement: .automatic) {
-                    Menu {
-                        Button {
-                            if let child = selectedChild { childForExport = child }
-                        } label: {
-                            Label("导出数据...", systemImage: "square.and.arrow.up")
-                        }
-                        .disabled(selectedChild == nil)
-
-                        Button {
-                            showFileImporter = true
-                        } label: {
-                            Label("导入数据...", systemImage: "square.and.arrow.down")
-                        }
-                        .disabled(selectedChild == nil)
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
-                    }
-                }
-            }
+            .navigationBarTitleDisplayMode(.inline)
             .overlay(alignment: .bottom) {
                 if let msg = toastMessage {
                     Text(msg)
@@ -239,28 +220,49 @@ struct ChartView: View {
         VStack(alignment: .leading, spacing: 14) {
             // Header
             VStack(alignment: .leading, spacing: 8) {
-                VStack(alignment: .leading, spacing: 2) {
-                    if feverEpisode != nil {
-                        Text("本次发烧")
-                            .font(.system(size: 15, weight: .bold))
-                        if let episode = feverEpisode {
-                            Text(
-                                episode.startDate.formatted(date: .abbreviated, time: .omitted)
-                                + " "
-                                + episode.startDate.formatted(date: .omitted, time: .shortened)
-                                + " 起"
-                            )
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
-                        }
-                    } else {
-                        Text("体温记录")
-                            .font(.system(size: 15, weight: .bold))
-                        if let last = tempPoints.last {
-                            Text("最近记录：" + last.timestamp.formatted(date: .abbreviated, time: .shortened))
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        if feverEpisode != nil {
+                            Text("本次发烧")
+                                .font(.system(size: 15, weight: .bold))
+                            if let episode = feverEpisode {
+                                Text(
+                                    episode.startDate.formatted(date: .abbreviated, time: .omitted)
+                                    + " "
+                                    + episode.startDate.formatted(date: .omitted, time: .shortened)
+                                    + " 起"
+                                )
                                 .font(.system(size: 11))
                                 .foregroundStyle(.secondary)
+                            }
+                        } else {
+                            Text("体温记录")
+                                .font(.system(size: 15, weight: .bold))
+                            if let last = tempPoints.last {
+                                Text("最近记录：" + last.timestamp.formatted(date: .abbreviated, time: .shortened))
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(.secondary)
+                            }
                         }
+                    }
+                    Spacer()
+                    Menu {
+                        Button {
+                            if let child = selectedChild { childForExport = child }
+                        } label: {
+                            Label("导出数据...", systemImage: "square.and.arrow.up")
+                        }
+                        .disabled(selectedChild == nil)
+                        Button {
+                            showFileImporter = true
+                        } label: {
+                            Label("导入数据...", systemImage: "square.and.arrow.down")
+                        }
+                        .disabled(selectedChild == nil)
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                            .font(.system(size: 18))
+                            .foregroundStyle(.secondary)
                     }
                 }
 
@@ -617,13 +619,8 @@ struct ChartView: View {
                 let importer = CSVImporter()
                 csvRawRows = try importer.readRawRows(url: url)
                 pendingConfig = ImportConfigStore.load()
-                let headers = csvRawRows.first?.map { $0.trimmingCharacters(in: .whitespaces) } ?? []
-                let unresolved = importer.detectUnresolvedColumns(headers: headers, config: pendingConfig)
-                if !unresolved.isEmpty {
-                    showColumnMappingSheet = true
-                } else {
-                    proceedToValueDetection()
-                }
+                // 始终显示列名映射，让用户确认或调整
+                showColumnMappingSheet = true
             } catch {
                 importError = error.localizedDescription
                 showImportError = true
