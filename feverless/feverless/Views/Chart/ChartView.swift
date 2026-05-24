@@ -400,15 +400,10 @@ struct ChartView: View {
                         .foregroundStyle(medColor.opacity(0.6))
                         .annotation(position: .top, spacing: 4) {
                             if chartTempPoints.count <= 20 {
-                                HStack(spacing: 2) {
-                                    Text(MedicationCatalog.shared.emoji(for: point.medicationNameRaw)).font(.system(size: 8))
-                                    Text(point.medicationNameRaw)
-                                        .font(.system(size: 8, weight: .semibold))
-                                        .foregroundStyle(medColor)
-                                }
-                                .padding(.horizontal, 5)
-                                .padding(.vertical, 2)
-                                .background(Capsule().fill(medColor.opacity(0.15)))
+                                Text(MedicationCatalog.shared.emoji(for: point.medicationNameRaw))
+                                    .font(.system(size: 10))
+                                    .padding(3)
+                                    .background(Circle().fill(medColor.opacity(0.15)))
                             }
                         }
                 }
