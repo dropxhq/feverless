@@ -145,7 +145,8 @@ struct ChartView: View {
     // 数据量超过阈值时，chart 切换到聚合视图以减少 GPU mark 数量
     private let chartPointThreshold = 80
 
-    private var useAggregatedChart: Bool { useMonthlyAggregation || tempPoints.count > chartPointThreshold }
+    private var useSeasonalChart: Bool { axisSpanMonths > 12 }
+    private var useAggregatedChart: Bool { useSeasonalChart || useMonthlyAggregation || tempPoints.count > chartPointThreshold }
 
     /// 用于图表渲染的体温点：
     /// - 超过 6 个月 → 每月最高体温
@@ -180,14 +181,78 @@ struct ChartView: View {
         }
     }
 
-    /// 超阈值时每天只保留第一条用药记录，避免 GPU surface 超限
+    /// 超阈值时每天只保留第一条用药记录；季节性视图不显示用药
     private var chartMedPoints: [MedPoint] {
+        if useSeasonalChart { return [] }
         guard useAggregatedChart else { return medPoints }
         let cal = Calendar.current
         var seenDays = Set<Date>()
         return medPoints.filter { pt in
             let day = cal.startOfDay(for: pt.timestamp)
             return seenDays.insert(day).inserted
+        }
+    }
+
+    // MARK: - Seasonal analysis (span > 1 year)
+
+    private struct SeasonalPoint: Identifiable {
+        let id: Int          // 1–12
+        let monthLabel: String
+        let ratio: Double    // feverDays / totalCalendarDays
+        let feverDays: Int
+        let totalCalendarDays: Int
+    }
+
+    private var seasonalPoints: [SeasonalPoint] {
+        guard let child = selectedChild else { return [] }
+        let cal = Calendar.current
+        let childRecords = allRecords.filter {
+            $0.childId == child.id && $0.timestamp >= range.start && $0.timestamp <= range.end
+        }
+        guard !childRecords.isEmpty else { return [] }
+
+        let dataStart = childRecords.map { $0.timestamp }.min()!
+        let dataEnd   = childRecords.map { $0.timestamp }.max()!
+        let firstYear = cal.component(.year, from: dataStart)
+        let lastYear  = cal.component(.year, from: dataEnd)
+
+        let dayFmt = DateFormatter()
+        dayFmt.dateFormat = "yyyy-MM-dd"
+
+        var feverDaysByMonth = [Int: Set<String>]()
+        for record in childRecords {
+            let hasFever = record.temperatures.contains { temp in
+                TemperaturePositionCatalog.shared.find(temp.positionRaw)
+                    .map { temp.value >= $0.feverThreshold } ?? (temp.value >= 37.5)
+            }
+            if hasFever {
+                let month = cal.component(.month, from: record.timestamp)
+                feverDaysByMonth[month, default: []].insert(dayFmt.string(from: record.timestamp))
+            }
+        }
+
+        let monthFmt = DateFormatter()
+        monthFmt.dateFormat = "M月"
+
+        return (1...12).map { month in
+            var totalDays = 0
+            for year in firstYear...lastYear {
+                var comps = DateComponents()
+                comps.year = year; comps.month = month; comps.day = 1
+                if let d = cal.date(from: comps), let r = cal.range(of: .day, in: .month, for: d) {
+                    totalDays += r.count
+                }
+            }
+            var lc = DateComponents(); lc.year = 2000; lc.month = month; lc.day = 1
+            let labelDate = cal.date(from: lc)!
+            let feverDays = feverDaysByMonth[month]?.count ?? 0
+            return SeasonalPoint(
+                id: month,
+                monthLabel: monthFmt.string(from: labelDate),
+                ratio: totalDays > 0 ? Double(feverDays) / Double(totalDays) : 0,
+                feverDays: feverDays,
+                totalCalendarDays: totalDays
+            )
         }
     }
 
@@ -367,6 +432,47 @@ struct ChartView: View {
                     description: Text(timeRange == .all ? "暂无任何体温记录" : "\(timeRange.rawValue)内没有体温记录")
                 )
                 .frame(height: 220)
+            } else if useSeasonalChart {
+                // 季节性发烧规律图：各月份发烧天数占比
+                let maxRatio = seasonalPoints.map { $0.ratio }.max() ?? 0.1
+                Chart {
+                    ForEach(seasonalPoints) { point in
+                        BarMark(
+                            x: .value("月份", point.monthLabel),
+                            yStart: .value("底", 0.0),
+                            yEnd: .value("发烧比例", point.ratio)
+                        )
+                        .foregroundStyle(
+                            point.ratio > 0
+                                ? Color.red.opacity(0.35 + point.ratio / max(maxRatio, 0.01) * 0.55)
+                                : Color.gray.opacity(0.15)
+                        )
+                        .cornerRadius(4)
+                        .annotation(position: .top, spacing: 2) {
+                            if point.feverDays > 0 {
+                                Text("\(Int((point.ratio * 100).rounded()))%")
+                                    .font(.system(size: 8, weight: .semibold))
+                                    .foregroundStyle(Color.red.opacity(0.75))
+                            }
+                        }
+                    }
+                }
+                .chartYScale(domain: 0...(max(maxRatio, 0.05) * 1.35))
+                .chartYAxis {
+                    AxisMarks(values: .automatic(desiredCount: 4)) { value in
+                        AxisGridLine()
+                        AxisValueLabel {
+                            if let v = value.as(Double.self) {
+                                Text("\(Int((v * 100).rounded()))%")
+                                    .font(.caption2)
+                            }
+                        }
+                    }
+                }
+                .chartXAxis {
+                    AxisMarks(position: .bottom) { _ in AxisValueLabel().font(.caption2) }
+                }
+                .frame(height: 220)
             } else {
             Chart {
                 // Normal zone background (below 37°)
@@ -498,6 +604,13 @@ struct ChartView: View {
             } // end if tempPoints.isEmpty
 
             // Legend
+            if useSeasonalChart {
+                HStack(spacing: 4) {
+                    RoundedRectangle(cornerRadius: 2).fill(Color.red.opacity(0.7)).frame(width: 12, height: 12)
+                    Text("有发烧记录的天数占该月总天数的比例").font(.system(size: 10)).foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
             HStack(spacing: 16) {
                 HStack(spacing: 4) {
                     Circle().fill(Color.red).frame(width: 7, height: 7)
@@ -517,9 +630,15 @@ struct ChartView: View {
                     Text("正常区间").font(.system(size: 10)).foregroundStyle(.secondary)
                 }
             }
+            } // end legend switch
 
             // 聚合模式提示
-            if useAggregatedChart {
+            if useSeasonalChart {
+                Text("数据跨度超过 1 年，显示各月份历史发烧天数占比")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else if useAggregatedChart {
                 Text(useMonthlyAggregation ? "数据跨度超过 6 个月，图表显示每月最高体温" : "数据点较多，图表显示每日最高体温")
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
