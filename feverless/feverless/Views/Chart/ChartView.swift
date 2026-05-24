@@ -126,6 +126,38 @@ struct ChartView: View {
             .sorted { $0.timestamp < $1.timestamp }
     }
 
+    // 数据量超过阈值时，chart 切换到按日聚合视图以减少 GPU mark 数量
+    private let chartPointThreshold = 80
+
+    private var useAggregatedChart: Bool { tempPoints.count > chartPointThreshold }
+
+    /// 用于图表渲染的体温点：数据量大时聚合为每日最高体温
+    private var chartTempPoints: [TempPoint] {
+        guard useAggregatedChart else { return tempPoints }
+        let cal = Calendar.current
+        var byDay: [Date: TempPoint] = [:]
+        for pt in tempPoints {
+            let day = cal.startOfDay(for: pt.timestamp)
+            if let existing = byDay[day] {
+                if pt.value > existing.value { byDay[day] = pt }
+            } else {
+                byDay[day] = pt
+            }
+        }
+        return byDay.values.sorted { $0.timestamp < $1.timestamp }
+    }
+
+    /// 数据量大时每天只保留第一条用药记录，避免 GPU surface 超限
+    private var chartMedPoints: [MedPoint] {
+        guard useAggregatedChart else { return medPoints }
+        let cal = Calendar.current
+        var seenDays = Set<Date>()
+        return medPoints.filter { pt in
+            let day = cal.startOfDay(for: pt.timestamp)
+            return seenDays.insert(day).inserted
+        }
+    }
+
     private var combinedRecords: [AnyRecentRecord] {
         guard let child = selectedChild else { return [] }
         let childRecords = allRecords.filter {
@@ -312,7 +344,7 @@ struct ChartView: View {
                 .foregroundStyle(Color.green.opacity(0.07))
 
                 // Temperature area fill + line + labeled points
-                ForEach(tempPoints) { point in
+                ForEach(chartTempPoints) { point in
                     AreaMark(
                         x: .value("时间", point.timestamp),
                         yStart: .value("底", yDomain.lowerBound),
@@ -340,9 +372,9 @@ struct ChartView: View {
                         y: .value("体温", point.value)
                     )
                     .foregroundStyle(Color.red)
-                    .symbolSize(tempPoints.count > 20 ? 20 : 50)
+                    .symbolSize(chartTempPoints.count > 20 ? 20 : 50)
                     .annotation(position: .top, spacing: 4) {
-                        if tempPoints.count <= 20 {
+                        if chartTempPoints.count <= 20 {
                             Text(String(format: "%.1f", point.value))
                                 .font(.system(size: 9, weight: .semibold))
                                 .foregroundStyle(point.isFever ? Color.red : Color.secondary)
@@ -360,14 +392,14 @@ struct ChartView: View {
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
                     .foregroundStyle(Color.teal.opacity(0.5))
 
-                // Medication time markers
-                ForEach(medPoints) { point in
+                // Medication time markers (only when dataset is small enough)
+                ForEach(chartMedPoints) { point in
                     let medColor = MedicationCatalog.shared.color(for: point.medicationNameRaw)
                     RuleMark(x: .value("用药", point.timestamp))
                         .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [3, 3]))
                         .foregroundStyle(medColor.opacity(0.6))
                         .annotation(position: .top, spacing: 4) {
-                            if tempPoints.count <= 20 {
+                            if chartTempPoints.count <= 20 {
                                 HStack(spacing: 2) {
                                     Text(MedicationCatalog.shared.emoji(for: point.medicationNameRaw)).font(.system(size: 8))
                                     Text(point.medicationNameRaw)
@@ -447,6 +479,14 @@ struct ChartView: View {
                     Text("正常区间").font(.system(size: 10)).foregroundStyle(.secondary)
                 }
             }
+
+            // 聚合模式提示
+            if useAggregatedChart {
+                Text("数据点较多，图表显示每日最高体温")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
         .padding()
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
@@ -501,7 +541,7 @@ struct ChartView: View {
     }
 
     private var yDomain: ClosedRange<Double> {
-        let vals = tempPoints.map { $0.value }
+        let vals = chartTempPoints.map { $0.value }
         let lo = (vals.min() ?? 36.0) - 0.5
         let hi = (vals.max() ?? 39.0) + 0.5
         return min(lo, 35.5)...max(hi, 38.5)
