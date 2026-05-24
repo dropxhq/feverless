@@ -8,14 +8,15 @@ import SwiftData
 
 // MARK: - Shared record union type (used by HomeView and ChartView)
 
+// Represents a single displayable item for the recent record list
 enum AnyRecentRecord {
-    case temperature(TemperatureRecord)
-    case medication(MedicationRecord)
+    case temperature(record: DataRecord, reading: TemperatureReading)
+    case medication(record: DataRecord, usage: MedicationUsage)
 
     var date: Date {
         switch self {
-        case .temperature(let r): return r.timestamp
-        case .medication(let r):  return r.timestamp
+        case .temperature(let r, _): return r.timestamp
+        case .medication(let r, _):  return r.timestamp
         }
     }
 }
@@ -43,49 +44,46 @@ private struct PulsingDot: View {
 struct HomeView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Child.createdAt) private var children: [Child]
-    @Query(sort: \TemperatureRecord.timestamp, order: .reverse) private var allTempRecords: [TemperatureRecord]
-    @Query(sort: \MedicationRecord.timestamp, order: .reverse) private var allMedRecords: [MedicationRecord]
+    @Query(sort: \DataRecord.timestamp, order: .reverse) private var allRecords: [DataRecord]
+    @ObservedObject private var catalog = MedicationCatalog.shared
 
     let selectedChild: Child?
     @Binding var selectedChildIdString: String
     @Binding var recordRequest: RecordRequest?
 
-    private var childTempRecords: [TemperatureRecord] {
+    private var childRecords: [DataRecord] {
         guard let child = selectedChild else { return [] }
-        return allTempRecords.filter { $0.childId == child.id }
-    }
-
-    private var childMedRecords: [MedicationRecord] {
-        guard let child = selectedChild else { return [] }
-        return allMedRecords.filter { $0.childId == child.id }
+        return allRecords.filter { $0.childId == child.id }
     }
 
     private var feverEpisode: FeverEpisode? {
-        FeverEpisodeDetector.currentEpisode(for: childTempRecords)
+        FeverEpisodeDetector.currentEpisode(for: childRecords)
     }
 
     private var recentRecords: [AnyRecentRecord] {
         var items: [AnyRecentRecord] = []
-        items += childTempRecords.prefix(5).map { .temperature($0) }
-        items += childMedRecords.prefix(5).map  { .medication($0) }
+        for record in childRecords.prefix(10) {
+            items += record.temperatures.map { .temperature(record: record, reading: $0) }
+            items += record.medications.map { .medication(record: record, usage: $0) }
+        }
         return Array(items.sorted { $0.date > $1.date }.prefix(5))
     }
 
     private var todayMedCount: Int {
         let startOfDay = Calendar.current.startOfDay(for: Date())
-        return childMedRecords.filter { $0.timestamp >= startOfDay }.count
+        return childRecords.filter { $0.timestamp >= startOfDay }.flatMap { $0.medications }.count
     }
 
     private var timeSinceLastMedString: String {
-        guard let lastMed = childMedRecords.first else { return "—" }
-        let interval = Date().timeIntervalSince(lastMed.timestamp)
+        guard let lastMedRecord = childRecords.first(where: { !$0.medications.isEmpty }) else { return "—" }
+        let interval = Date().timeIntervalSince(lastMedRecord.timestamp)
         let hours = Int(interval) / 3600
         let minutes = (Int(interval) % 3600) / 60
         return hours > 0 ? "\(hours)h \(minutes)m" : "\(minutes)m"
     }
 
     private var lastRecordTimeString: String {
-        guard let last = childTempRecords.first else { return "—" }
+        guard let last = childRecords.first(where: { !$0.temperatures.isEmpty }) else { return "—" }
         let formatter = DateFormatter()
         formatter.dateFormat = "HH:mm"
         return formatter.string(from: last.timestamp)
@@ -174,7 +172,8 @@ struct HomeView: View {
                 .tracking(1.0)
                 .foregroundStyle(.white.opacity(0.5))
 
-                if let latest = childTempRecords.first {
+                if let latestRecord = childRecords.first,
+                   let latest = latestRecord.temperatures.first {
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
                         Text(String(format: "%.1f", latest.value))
                             .font(.system(size: 60, weight: .thin))
@@ -187,8 +186,9 @@ struct HomeView: View {
                     }
 
                     // Change badge
-                    if isFever, childTempRecords.count >= 2 {
-                        let diff = latest.value - childTempRecords[1].value
+                    let allReadings = childRecords.flatMap { $0.temperatures }
+                    if isFever, allReadings.count >= 2 {
+                        let diff = allReadings[0].value - allReadings[1].value
                         HStack(spacing: 4) {
                             Image(systemName: diff > 0.01 ? "arrow.up" : diff < -0.01 ? "arrow.down" : "minus")
                                 .font(.caption2)
@@ -289,19 +289,23 @@ struct HomeView: View {
 
                 Divider()
 
-                medicationRow(type: .ibuprofen, childId: child.id)
-                Divider().padding(.leading, 64)
-                medicationRow(type: .acetaminophen, childId: child.id)
+                let reminderMeds = catalog.all.filter { $0.hasReminder }
+                ForEach(Array(reminderMeds.enumerated()), id: \.element.id) { index, def in
+                    if index > 0 { Divider().padding(.leading, 64) }
+                    medicationRow(definition: def, childId: child.id)
+                }
 
-                if let lastMainMed = childMedRecords.filter({ $0.type != .other }).first {
-                    let interval = Date().timeIntervalSince(lastMainMed.timestamp)
+                if let lastMainRecord = childRecords.first(where: { record in
+                    record.medications.contains { $0.medicationNameRaw != "其他" }
+                }), let lastMed = lastMainRecord.medications.first(where: { $0.medicationNameRaw != "其他" }) {
+                    let interval = Date().timeIntervalSince(lastMainRecord.timestamp)
                     let hours = Int(interval) / 3600
                     let minutes = (Int(interval) % 3600) / 60
                     let sinceText = hours > 0 ? "\(hours) 小时 \(minutes) 分" : "\(minutes) 分"
 
                     Divider()
                     Text({
-                        let base = AttributedString("距上次服用\(lastMainMed.type.displayName)已过 ")
+                        let base = AttributedString("距上次服用\(lastMed.medicationNameRaw)已过 ")
                         var bold = AttributedString(sinceText)
                         bold.swiftUI.font = .system(size: 12, weight: .semibold)
                         return base + bold
@@ -319,26 +323,31 @@ struct HomeView: View {
     }
 
     @ViewBuilder
-    private func medicationRow(type: MedicationType, childId: UUID) -> some View {
+    private func medicationRow(definition: MedicationDefinition, childId: UUID) -> some View {
         let avail = MedicationSafetyViewModel.availability(
-            for: type, childId: childId, records: childMedRecords
+            forMedicationName: definition.canonicalName, childId: childId, records: childRecords
         )
-        let lastDose = childMedRecords.filter { $0.type == type }.first
+        let lastDoseTimestamp = childRecords
+            .flatMap { record -> [Date] in
+                record.medications
+                    .filter { $0.medicationNameRaw == definition.canonicalName }
+                    .map { _ in record.timestamp }
+            }.max()
 
         HStack(spacing: 12) {
             RoundedRectangle(cornerRadius: 10)
-                .fill(medIconBackground(for: type))
+                .fill(catalog.iconBackground(for: definition.canonicalName))
                 .frame(width: 36, height: 36)
-                .overlay(Text(type.emoji).font(.body))
+                .overlay(Text(catalog.emoji(for: definition.canonicalName)).font(.body))
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(type.displayName)
+                Text(definition.canonicalName)
                     .font(.system(size: 14, weight: .semibold))
-                if let lastDose {
-                    let interval = Date().timeIntervalSince(lastDose.timestamp)
+                if let ts = lastDoseTimestamp {
+                    let interval = Date().timeIntervalSince(ts)
                     let h = Int(interval) / 3600
                     let m = (Int(interval) % 3600) / 60
-                    let timeStr = lastDose.timestamp.formatted(date: .omitted, time: .shortened)
+                    let timeStr = ts.formatted(date: .omitted, time: .shortened)
                     let elapsed = h > 0 ? "\(h)h \(m)m" : "\(m)m"
                     Text("\(timeStr) 服用 · 距今 \(elapsed)")
                         .font(.system(size: 11))
@@ -364,14 +373,6 @@ struct HomeView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-    }
-
-    private func medIconBackground(for type: MedicationType) -> Color {
-        switch type {
-        case .ibuprofen:     return Color.yellow.opacity(0.15)
-        case .acetaminophen: return Color.blue.opacity(0.1)
-        case .other:         return Color.gray.opacity(0.12)
-        }
     }
 
     // MARK: Quick Record Buttons
@@ -432,52 +433,53 @@ struct HomeView: View {
                 ForEach(Array(recentRecords.enumerated()), id: \.offset) { index, item in
                     HStack(spacing: 12) {
                         switch item {
-                        case .temperature(let r):
+                        case .temperature(let record, let reading):
+                            let isFever = reading.isFever()
                             RoundedRectangle(cornerRadius: 10)
-                                .fill(r.isFever ? Color.red.opacity(0.08) : Color.green.opacity(0.1))
+                                .fill(isFever ? Color.red.opacity(0.08) : Color.green.opacity(0.1))
                                 .frame(width: 34, height: 34)
                                 .overlay(
                                     Image(systemName: "thermometer.medium")
                                         .font(.system(size: 14))
-                                        .foregroundStyle(r.isFever ? Color.red : Color.green)
+                                        .foregroundStyle(isFever ? Color.red : Color.green)
                                 )
                             VStack(alignment: .leading, spacing: 2) {
                                 HStack(spacing: 4) {
-                                    Text(String(format: "%.1f°C", r.value))
+                                    Text(String(format: "%.1f°C", reading.value))
                                         .font(.system(size: 14, weight: .semibold))
-                                        .foregroundStyle(r.isFever ? Color.red : Color.primary)
-                                    Text("· " + r.method.displayName)
+                                        .foregroundStyle(isFever ? Color.red : Color.primary)
+                                    Text("· " + reading.positionRaw)
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                 }
-                                Text(r.timestamp, style: .relative)
+                                Text(record.timestamp, style: .relative)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
                             Spacer()
-                            Text(r.isFever ? (r.value >= 39.0 ? "高烧" : "发烧") : "正常")
+                            Text(isFever ? (reading.value >= 39.0 ? "高烧" : "发烧") : "正常")
                                 .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(r.isFever ? Color.red : Color.green)
+                                .foregroundStyle(isFever ? Color.red : Color.green)
                                 .padding(.horizontal, 9)
                                 .padding(.vertical, 3)
                                 .background(
                                     RoundedRectangle(cornerRadius: 8)
-                                        .fill(r.isFever ? Color.red.opacity(0.08) : Color.green.opacity(0.1))
+                                        .fill(isFever ? Color.red.opacity(0.08) : Color.green.opacity(0.1))
                                 )
 
-                        case .medication(let r):
+                        case .medication(let record, let usage):
                             RoundedRectangle(cornerRadius: 10)
-                                .fill(r.type == .ibuprofen ? Color.yellow.opacity(0.12) : Color.blue.opacity(0.08))
+                                .fill(MedicationCatalog.shared.color(for: usage.medicationNameRaw).opacity(0.12))
                                 .frame(width: 34, height: 34)
                                 .overlay(
                                     Image(systemName: "pill.fill")
                                         .font(.system(size: 14))
-                                        .foregroundStyle(r.type.color)
+                                        .foregroundStyle(MedicationCatalog.shared.color(for: usage.medicationNameRaw))
                                 )
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(r.type.displayName)
+                                Text(usage.medicationNameRaw)
                                     .font(.system(size: 14, weight: .semibold))
-                                Text(r.timestamp, style: .relative)
+                                Text(record.timestamp, style: .relative)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }

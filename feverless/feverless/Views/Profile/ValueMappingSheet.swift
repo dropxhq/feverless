@@ -11,7 +11,8 @@ struct UnresolvedValueGroup: Identifiable {
 // MARK: - ValueMappingSheet
 
 /// Displays unrecognized enum values grouped by field and lets the user map them
-/// to known enum rawValues (or ignore them).
+/// to known canonical values (or ignore them). Also provides shortcuts to open
+/// MedicationCatalogView or TemperaturePositionCatalogView as sheets.
 struct ValueMappingSheet: View {
     let valueGroups: [UnresolvedValueGroup]
     let config: ImportMappingConfig
@@ -19,11 +20,17 @@ struct ValueMappingSheet: View {
     let onDone: (ImportMappingConfig) -> Void
 
     @State private var localConfig: ImportMappingConfig
-    @State private var newKeyword: String = ""
-    @State private var newKeywordType: MedicationType = .ibuprofen
-    @State private var showAddKeyword: Bool = false
+    @ObservedObject private var medicationCatalog = MedicationCatalog.shared
+    @ObservedObject private var positionCatalog = TemperaturePositionCatalog.shared
+
+    @State private var showMedicationCatalog: Bool = false
+    @State private var showPositionCatalog: Bool = false
 
     @Environment(\.dismiss) private var dismiss
+
+    private var hasUnresolvedPositions: Bool {
+        valueGroups.contains { $0.id == "method" }
+    }
 
     init(valueGroups: [UnresolvedValueGroup], config: ImportMappingConfig, hasKeywordColumns: Bool = false, onDone: @escaping (ImportMappingConfig) -> Void) {
         self.valueGroups = valueGroups
@@ -41,19 +48,21 @@ struct ValueMappingSheet: View {
         ("忽略，记为默认值", ""),
     ]
 
-    private let measurementMethodOptions: [(displayName: String, rawValue: String)] =
-        MeasurementMethod.allCases.map { ($0.displayName, $0.rawValue) }
+    private func measurementMethodOptions() -> [(displayName: String, rawValue: String)] {
+        positionCatalog.all.map { ($0.canonicalName, $0.canonicalName) }
         + [("忽略，记为默认值", "")]
+    }
 
-    private let medicationTypeOptions: [(displayName: String, rawValue: String)] =
-        MedicationType.allCases.map { ($0.displayName, $0.rawValue) }
+    private func medicationTypeOptions() -> [(displayName: String, rawValue: String)] {
+        medicationCatalog.all.map { ($0.canonicalName, $0.canonicalName) }
         + [("忽略，记为默认值", "")]
+    }
 
     private func options(for field: String) -> [(displayName: String, rawValue: String)] {
         switch field {
         case "record_type":     return recordTypeOptions
-        case "method":          return measurementMethodOptions
-        case "medication_type": return medicationTypeOptions
+        case "method":          return measurementMethodOptions()
+        case "medication_type": return medicationTypeOptions()
         default:                return []
         }
     }
@@ -63,10 +72,9 @@ struct ValueMappingSheet: View {
     var body: some View {
         NavigationStack {
             List {
-                // 7.2 Sections per field
+                // Sections per field
                 ForEach(valueGroups) { group in
                     Section(group.fieldDisplayName) {
-                        // 7.3 Each row: original value (×N) + target picker
                         ForEach(group.items, id: \.value) { item in
                             valueMappingRow(
                                 originalValue: item.value,
@@ -77,10 +85,25 @@ struct ValueMappingSheet: View {
                     }
                 }
 
-                // 3.2 Keyword configuration section (independent of enum groups)
+                // Medication management shortcut
                 if hasKeywordColumns {
                     Section("药物关键词") {
-                        addKeywordButton()
+                        Button {
+                            showMedicationCatalog = true
+                        } label: {
+                            Label("管理药品", systemImage: "pills.circle")
+                        }
+                    }
+                }
+
+                // Temperature position management shortcut (shown when unresolved positions exist)
+                if hasUnresolvedPositions {
+                    Section("体温位置") {
+                        Button {
+                            showPositionCatalog = true
+                        } label: {
+                            Label("管理体温位置", systemImage: "thermometer.medium")
+                        }
                     }
                 }
             }
@@ -97,6 +120,12 @@ struct ValueMappingSheet: View {
                     }
                     .fontWeight(.semibold)
                 }
+            }
+            .sheet(isPresented: $showMedicationCatalog) {
+                MedicationCatalogView(isSheet: true)
+            }
+            .sheet(isPresented: $showPositionCatalog) {
+                TemperaturePositionCatalogView(isSheet: true)
             }
         }
     }
@@ -133,70 +162,5 @@ struct ValueMappingSheet: View {
             .labelsHidden()
         }
     }
-
-    // MARK: - 7.4 Add keyword button and inline form
-
-    @ViewBuilder
-    private func addKeywordButton() -> some View {
-        if showAddKeyword {
-            VStack(alignment: .leading, spacing: 8) {
-                TextField("关键词（如：小儿布洛芬）", text: $newKeyword)
-                    .textFieldStyle(.roundedBorder)
-
-                Picker("药物类型", selection: $newKeywordType) {
-                    ForEach(MedicationType.allCases.filter { $0 != .other }, id: \.rawValue) { type in
-                        Text(type.displayName).tag(type)
-                    }
-                }
-                .pickerStyle(.segmented)
-
-                HStack {
-                    Button("取消") {
-                        newKeyword = ""
-                        showAddKeyword = false
-                    }
-                    .foregroundStyle(.secondary)
-                    Spacer()
-                    Button("添加") {
-                        let trimmed = newKeyword.trimmingCharacters(in: .whitespaces)
-                        guard !trimmed.isEmpty else { return }
-                        localConfig.keywordExtensions[trimmed] = newKeywordType.rawValue
-                        newKeyword = ""
-                        showAddKeyword = false
-                    }
-                    .fontWeight(.semibold)
-                    .disabled(newKeyword.trimmingCharacters(in: .whitespaces).isEmpty)
-                }
-            }
-            .padding(.vertical, 4)
-        } else {
-            Button {
-                showAddKeyword = true
-            } label: {
-                Label("添加关键词", systemImage: "plus")
-                    .font(.subheadline)
-            }
-        }
-
-        // Show existing custom keywords
-        ForEach(Array(localConfig.keywordExtensions.keys.sorted()), id: \.self) { keyword in
-            if let typeRaw = localConfig.keywordExtensions[keyword],
-               let type = MedicationType(rawValue: typeRaw) {
-                HStack {
-                    Text(keyword).font(.subheadline)
-                    Spacer()
-                    Text(type.displayName)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Button {
-                        localConfig.keywordExtensions.removeValue(forKey: keyword)
-                    } label: {
-                        Image(systemName: "minus.circle.fill")
-                            .foregroundStyle(.red)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
-    }
 }
+

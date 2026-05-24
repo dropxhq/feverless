@@ -29,35 +29,59 @@ enum ChartTimeRange: String, CaseIterable {
 }
 
 struct ChartView: View {
-    @Query(sort: \TemperatureRecord.timestamp) private var allTempRecords: [TemperatureRecord]
-    @Query(sort: \MedicationRecord.timestamp)  private var allMedRecords:  [MedicationRecord]
+    @Query(sort: \DataRecord.timestamp) private var allRecords: [DataRecord]
+    @ObservedObject private var catalog = MedicationCatalog.shared
 
     let selectedChild: Child?
     @State private var timeRange: ChartTimeRange = .today
 
     private var range: (start: Date, end: Date) { timeRange.dateRange }
 
-    private var tempRecords: [TemperatureRecord] {
-        guard let child = selectedChild else { return [] }
-        return allTempRecords.filter {
-            $0.childId == child.id &&
-            $0.timestamp >= range.start &&
-            $0.timestamp <= range.end
-        }
+    // Flattened temperature readings with their parent record timestamps
+    private struct TempPoint: Identifiable {
+        let id = UUID()
+        let timestamp: Date
+        let value: Double
+        let positionRaw: String
+        var isFever: Bool { TemperaturePositionCatalog.shared.find(positionRaw).map { value >= $0.feverThreshold } ?? (value >= 37.5) }
     }
 
-    private var medRecords: [MedicationRecord] {
+    private struct MedPoint: Identifiable {
+        let id = UUID()
+        let timestamp: Date
+        let medicationNameRaw: String
+    }
+
+    private var tempPoints: [TempPoint] {
         guard let child = selectedChild else { return [] }
-        return allMedRecords.filter {
-            $0.childId == child.id &&
-            $0.timestamp >= range.start &&
-            $0.timestamp <= range.end
-        }
+        return allRecords
+            .filter { $0.childId == child.id && $0.timestamp >= range.start && $0.timestamp <= range.end }
+            .flatMap { record in
+                record.temperatures.map { TempPoint(timestamp: record.timestamp, value: $0.value, positionRaw: $0.positionRaw) }
+            }
+            .sorted { $0.timestamp < $1.timestamp }
+    }
+
+    private var medPoints: [MedPoint] {
+        guard let child = selectedChild else { return [] }
+        return allRecords
+            .filter { $0.childId == child.id && $0.timestamp >= range.start && $0.timestamp <= range.end }
+            .flatMap { record in
+                record.medications.map { MedPoint(timestamp: record.timestamp, medicationNameRaw: $0.medicationNameRaw) }
+            }
+            .sorted { $0.timestamp < $1.timestamp }
     }
 
     private var combinedRecords: [AnyRecentRecord] {
-        var items: [AnyRecentRecord] = tempRecords.map { .temperature($0) }
-        items += medRecords.map { .medication($0) }
+        guard let child = selectedChild else { return [] }
+        let childRecords = allRecords.filter {
+            $0.childId == child.id && $0.timestamp >= range.start && $0.timestamp <= range.end
+        }
+        var items: [AnyRecentRecord] = []
+        for record in childRecords {
+            items += record.temperatures.map { .temperature(record: record, reading: $0) }
+            items += record.medications.map { .medication(record: record, usage: $0) }
+        }
         return items.sorted { $0.date > $1.date }
     }
 
@@ -85,7 +109,7 @@ struct ChartView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("本次发烧")
                         .font(.system(size: 15, weight: .bold))
-                    if let first = tempRecords.first {
+                    if let first = tempPoints.first {
                         Text(
                             first.timestamp.formatted(date: .abbreviated, time: .omitted)
                             + " "
@@ -113,7 +137,7 @@ struct ChartView: View {
                 }
             }
 
-            if tempRecords.isEmpty {
+            if tempPoints.isEmpty {
                 ContentUnavailableView(
                     "暂无记录",
                     systemImage: "chart.line.uptrend.xyaxis",
@@ -130,11 +154,11 @@ struct ChartView: View {
                 .foregroundStyle(Color.green.opacity(0.07))
 
                 // Temperature area fill + line + labeled points
-                ForEach(tempRecords, id: \.id) { record in
+                ForEach(tempPoints) { point in
                     AreaMark(
-                        x: .value("时间", record.timestamp),
+                        x: .value("时间", point.timestamp),
                         yStart: .value("底", yDomain.lowerBound),
-                        yEnd: .value("体温", record.value)
+                        yEnd: .value("体温", point.value)
                     )
                     .foregroundStyle(
                         LinearGradient(
@@ -146,23 +170,23 @@ struct ChartView: View {
                     .interpolationMethod(.catmullRom)
 
                     LineMark(
-                        x: .value("时间", record.timestamp),
-                        y: .value("体温", record.value)
+                        x: .value("时间", point.timestamp),
+                        y: .value("体温", point.value)
                     )
                     .foregroundStyle(Color.red)
                     .lineStyle(StrokeStyle(lineWidth: 2))
                     .interpolationMethod(.catmullRom)
 
                     PointMark(
-                        x: .value("时间", record.timestamp),
-                        y: .value("体温", record.value)
+                        x: .value("时间", point.timestamp),
+                        y: .value("体温", point.value)
                     )
                     .foregroundStyle(Color.red)
                     .symbolSize(50)
                     .annotation(position: .top, spacing: 4) {
-                        Text(String(format: "%.1f", record.value))
+                        Text(String(format: "%.1f", point.value))
                             .font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(record.isFever ? Color.red : Color.secondary)
+                            .foregroundStyle(point.isFever ? Color.red : Color.secondary)
                     }
                 }
 
@@ -187,20 +211,21 @@ struct ChartView: View {
                     }
 
                 // Medication time markers
-                ForEach(medRecords, id: \.id) { record in
-                    RuleMark(x: .value("用药", record.timestamp))
+                ForEach(medPoints) { point in
+                    let medColor = MedicationCatalog.shared.color(for: point.medicationNameRaw)
+                    RuleMark(x: .value("用药", point.timestamp))
                         .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [3, 3]))
-                        .foregroundStyle(record.type.color.opacity(0.6))
+                        .foregroundStyle(medColor.opacity(0.6))
                         .annotation(position: .top, spacing: 4) {
                             HStack(spacing: 2) {
-                                Text(record.type.emoji).font(.system(size: 8))
-                                Text(record.type.displayName)
+                                Text(MedicationCatalog.shared.emoji(for: point.medicationNameRaw)).font(.system(size: 8))
+                                Text(point.medicationNameRaw)
                                     .font(.system(size: 8, weight: .semibold))
-                                    .foregroundStyle(record.type.color)
+                                    .foregroundStyle(medColor)
                             }
                             .padding(.horizontal, 5)
                             .padding(.vertical, 2)
-                            .background(Capsule().fill(record.type.color.opacity(0.15)))
+                            .background(Capsule().fill(medColor.opacity(0.15)))
                         }
                 }
             }
@@ -212,7 +237,7 @@ struct ChartView: View {
                 }
             }
             .frame(height: 220)
-            } // end if tempRecords.isEmpty
+            } // end if tempPoints.isEmpty
 
             // Legend
             HStack(spacing: 16) {
@@ -220,16 +245,11 @@ struct ChartView: View {
                     Circle().fill(Color.red).frame(width: 7, height: 7)
                     Text("体温").font(.system(size: 10)).foregroundStyle(.secondary)
                 }
-                if medRecords.contains(where: { $0.type == .ibuprofen }) {
+                let shownMedNames = Set(medPoints.map { $0.medicationNameRaw }).subtracting(["其他"])
+                ForEach(Array(shownMedNames.sorted()), id: \.self) { name in
                     HStack(spacing: 4) {
-                        Rectangle().fill(Color.yellow).frame(width: 14, height: 2)
-                        Text("布洛芬").font(.system(size: 10)).foregroundStyle(.secondary)
-                    }
-                }
-                if medRecords.contains(where: { $0.type == .acetaminophen }) {
-                    HStack(spacing: 4) {
-                        Rectangle().fill(Color.blue).frame(width: 14, height: 2)
-                        Text("对乙酰氨基酚").font(.system(size: 10)).foregroundStyle(.secondary)
+                        Rectangle().fill(MedicationCatalog.shared.color(for: name)).frame(width: 14, height: 2)
+                        Text(name).font(.system(size: 10)).foregroundStyle(.secondary)
                     }
                 }
                 HStack(spacing: 4) {
@@ -246,7 +266,7 @@ struct ChartView: View {
     }
 
     private var yDomain: ClosedRange<Double> {
-        let vals = tempRecords.map { $0.value }
+        let vals = tempPoints.map { $0.value }
         let lo = (vals.min() ?? 36.0) - 0.5
         let hi = (vals.max() ?? 39.0) + 0.5
         return min(lo, 35.5)...max(hi, 38.5)
@@ -268,25 +288,26 @@ struct ChartView: View {
                 ForEach(Array(items.enumerated()), id: \.offset) { index, item in
                     HStack(spacing: 12) {
                         switch item {
-                        case .temperature(let r):
+                        case .temperature(let record, let reading):
+                            let isFever = reading.isFever()
                             RoundedRectangle(cornerRadius: 10)
-                                .fill(r.isFever ? Color.red.opacity(0.08) : Color.green.opacity(0.1))
+                                .fill(isFever ? Color.red.opacity(0.08) : Color.green.opacity(0.1))
                                 .frame(width: 34, height: 34)
                                 .overlay(
                                     Image(systemName: "thermometer.medium")
                                         .font(.system(size: 14))
-                                        .foregroundStyle(r.isFever ? Color.red : Color.green)
+                                        .foregroundStyle(isFever ? Color.red : Color.green)
                                 )
                             VStack(alignment: .leading, spacing: 2) {
                                 HStack(spacing: 4) {
-                                    Text(String(format: "%.1f°C", r.value))
+                                    Text(String(format: "%.1f°C", reading.value))
                                         .font(.system(size: 14, weight: .semibold))
-                                        .foregroundStyle(r.isFever ? Color.red : Color.primary)
-                                    Text("· " + r.method.displayName)
+                                        .foregroundStyle(isFever ? Color.red : Color.primary)
+                                    Text("· " + reading.positionRaw)
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
-                                    if r.isFever {
-                                        Text(r.value >= 39.0 ? "高烧" : "发烧")
+                                    if isFever {
+                                        Text(reading.value >= 39.0 ? "高烧" : "发烧")
                                             .font(.system(size: 11, weight: .semibold))
                                             .foregroundStyle(Color.red)
                                             .padding(.horizontal, 7)
@@ -294,24 +315,24 @@ struct ChartView: View {
                                             .background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
                                     }
                                 }
-                                Text(r.timestamp.formatted(date: .abbreviated, time: .shortened))
+                                Text(record.timestamp.formatted(date: .abbreviated, time: .shortened))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
 
-                        case .medication(let r):
+                        case .medication(let record, let usage):
                             RoundedRectangle(cornerRadius: 10)
-                                .fill(r.type == .ibuprofen ? Color.yellow.opacity(0.12) : Color.blue.opacity(0.08))
+                                .fill(MedicationCatalog.shared.color(for: usage.medicationNameRaw).opacity(0.12))
                                 .frame(width: 34, height: 34)
                                 .overlay(
                                     Image(systemName: "pill.fill")
                                         .font(.system(size: 14))
-                                        .foregroundStyle(r.type.color)
+                                        .foregroundStyle(MedicationCatalog.shared.color(for: usage.medicationNameRaw))
                                 )
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(r.type.displayName)
+                                Text(usage.medicationNameRaw)
                                     .font(.system(size: 14, weight: .semibold))
-                                Text(r.timestamp.formatted(date: .abbreviated, time: .shortened))
+                                Text(record.timestamp.formatted(date: .abbreviated, time: .shortened))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }

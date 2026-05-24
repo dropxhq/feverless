@@ -43,31 +43,47 @@ enum MedicationAvailability {
 }
 
 struct MedicationSafetyViewModel {
-    /// Returns the current availability for a given medication type for a specific child.
+    /// Returns the current availability for a given medication (by canonical name) for a specific child.
     /// - Parameters:
-    ///   - type: The medication type to check.
+    ///   - name: The medication's canonical name (e.g. "布洛芬").
+    ///   - catalog: The MedicationCatalog to look up safety parameters.
     ///   - childId: The child's UUID.
-    ///   - records: All MedicationRecord objects (unfiltered).
+    ///   - records: All DataRecord objects (unfiltered).
     static func availability(
-        for type: MedicationType,
+        forMedicationName name: String,
+        catalog: MedicationCatalog = .shared,
         childId: UUID,
-        records: [MedicationRecord]
+        records: [DataRecord]
     ) -> MedicationAvailability {
+        // If no reminder configured, or medication not in catalog, always available
+        guard let def = catalog.findByCanonicalName(name),
+              def.hasReminder,
+              let minIntervalHours = def.minIntervalHours else {
+            return .available
+        }
+
         let now = Date()
         let startOfDay = Calendar.current.startOfDay(for: now)
-
-        let childRecords = records.filter { $0.childId == childId && $0.type == type }
+        let timestamps = records
+            .filter { $0.childId == childId }
+            .flatMap { record -> [Date] in
+                record.medications
+                    .filter { $0.medicationNameRaw == name }
+                    .map { _ in record.timestamp }
+            }
 
         // Check daily dose limit
-        let todayCount = childRecords.filter { $0.timestamp >= startOfDay }.count
-        if type.maxDailyDoses != Int.max && todayCount >= type.maxDailyDoses {
-            return .dailyLimitReached
+        if let maxDoses = def.maxDailyDoses {
+            let todayCount = timestamps.filter { $0 >= startOfDay }.count
+            if todayCount >= maxDoses {
+                return .dailyLimitReached
+            }
         }
 
         // Check minimum interval since last dose
-        if let lastDose = childRecords.map({ $0.timestamp }).max() {
+        if let lastDose = timestamps.max() {
             let elapsed = now.timeIntervalSince(lastDose)
-            let minInterval = type.minimumIntervalHours * 3600
+            let minInterval = minIntervalHours * 3600
             if elapsed < minInterval {
                 return .cooldown(remaining: minInterval - elapsed)
             }

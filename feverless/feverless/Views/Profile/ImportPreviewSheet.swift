@@ -14,11 +14,19 @@ struct ImportPreviewSheet: View {
     // MARK: - Helpers
 
     private var isAllDuplicate: Bool {
-        parseResult.temperatureRows.isEmpty && parseResult.medicationRows.isEmpty
+        parseResult.records.isEmpty
     }
 
     private var totalImportCount: Int {
-        parseResult.temperatureRows.count + parseResult.medicationRows.count
+        parseResult.records.count
+    }
+
+    private var tempCount: Int {
+        parseResult.records.reduce(0) { $0 + $1.temperatures.count }
+    }
+
+    private var medCount: Int {
+        parseResult.records.reduce(0) { $0 + $1.medications.count }
     }
 
     // 8.1 Preview time formatter (HH:mm)
@@ -30,19 +38,19 @@ struct ImportPreviewSheet: View {
 
     // 8.1 First 3 records merged and sorted by timestamp
     private var previewRecords: [PreviewRecord] {
-        let temps = parseResult.temperatureRows.map { r in
-            PreviewRecord(
-                timestamp: r.timestamp,
-                label: String(format: "%.1f°C %@ %@", r.value, r.method.displayName, timeFmt.string(from: r.timestamp))
-            )
+        return parseResult.records.prefix(3).map { record in
+            let tempStr = record.temperatures.map { String(format: "%.1f°C %@", $0.value, $0.positionRaw) }.joined(separator: " / ")
+            let medStr = record.medications.map { $0.medicationNameRaw }.joined(separator: " / ")
+            let label: String
+            if !tempStr.isEmpty && !medStr.isEmpty {
+                label = "\(tempStr) · \(medStr)"
+            } else if !tempStr.isEmpty {
+                label = tempStr
+            } else {
+                label = medStr
+            }
+            return PreviewRecord(timestamp: record.timestamp, label: label + " " + timeFmt.string(from: record.timestamp))
         }
-        let meds = parseResult.medicationRows.map { r in
-            PreviewRecord(
-                timestamp: r.timestamp,
-                label: "\(r.type.displayName) \(timeFmt.string(from: r.timestamp))"
-            )
-        }
-        return (temps + meds).sorted { $0.timestamp < $1.timestamp }.prefix(3).map { $0 }
     }
 
     private struct PreviewRecord {
@@ -58,14 +66,19 @@ struct ImportPreviewSheet: View {
                 // Counts section
                 Section("导入预览") {
                     HStack {
-                        Label("体温记录", systemImage: "thermometer")
+                        Label("数据记录", systemImage: "doc.text")
                         Spacer()
-                        Text("\(parseResult.temperatureRows.count) 条").foregroundStyle(.secondary)
+                        Text("\(parseResult.records.count) 条").foregroundStyle(.secondary)
+                    }
+                    HStack {
+                        Label("体温读数", systemImage: "thermometer")
+                        Spacer()
+                        Text("\(tempCount) 次").foregroundStyle(.secondary)
                     }
                     HStack {
                         Label("用药记录", systemImage: "pill")
                         Spacer()
-                        Text("\(parseResult.medicationRows.count) 条").foregroundStyle(.secondary)
+                        Text("\(medCount) 次").foregroundStyle(.secondary)
                     }
                     HStack {
                         Label("重复跳过", systemImage: "arrow.uturn.backward.circle")
@@ -159,11 +172,10 @@ struct ImportPreviewSheet: View {
     // MARK: - Confirm import
 
     private func confirmImport() {
-        for record in parseResult.temperatureRows { modelContext.insert(record) }
-        for record in parseResult.medicationRows  { modelContext.insert(record) }
+        for record in parseResult.records { modelContext.insert(record) }
         try? modelContext.save()
 
-        // 8.4 Persist mapping config for future imports
+        // Persist mapping config for future imports
         ImportConfigStore.save(importConfig)
 
         onComplete(totalImportCount)

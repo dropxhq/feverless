@@ -9,10 +9,12 @@ import SwiftData
 @main
 struct feverlessApp: App {
     var sharedModelContainer: ModelContainer = {
+
         let schema = Schema([
             Child.self,
-            TemperatureRecord.self,
-            MedicationRecord.self,
+            DataRecord.self,
+            TemperatureReading.self,
+            MedicationUsage.self,
         ])
 
         guard let appGroupURL = FileManager.default
@@ -49,6 +51,11 @@ struct feverlessApp: App {
             }
         }
     }()
+
+    init() {
+        MedicationCatalog.shared.load()
+        TemperaturePositionCatalog.shared.load()
+    }
 
     var body: some Scene {
         WindowGroup {

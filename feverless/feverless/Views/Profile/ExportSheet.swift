@@ -34,8 +34,7 @@ struct ExportSheet: View {
 
     let child: Child
 
-    @Query(sort: \TemperatureRecord.timestamp) private var allTempRecords: [TemperatureRecord]
-    @Query(sort: \MedicationRecord.timestamp)  private var allMedRecords:  [MedicationRecord]
+    @Query(sort: \DataRecord.timestamp) private var allRecords: [DataRecord]
 
     // 3.2 Time range state
     @State private var timeRange: ExportTimeRange = .last30Days
@@ -49,25 +48,24 @@ struct ExportSheet: View {
 
     // MARK: - Filtered records
 
-    private var childTempRecords: [TemperatureRecord] {
-        allTempRecords.filter { $0.childId == child.id }
+    private var childRecords: [DataRecord] {
+        allRecords.filter { $0.childId == child.id }
     }
 
-    private var childMedRecords: [MedicationRecord] {
-        allMedRecords.filter { $0.childId == child.id }
+    private var filteredRecords: [DataRecord] {
+        childRecords.filter { isInRange($0.timestamp) }
     }
 
-    // 3.4 Real-time preview counts
-    private var filteredTempRecords: [TemperatureRecord] {
-        childTempRecords.filter { isInRange($0.timestamp) }
+    private var tempCount: Int {
+        filteredRecords.reduce(0) { $0 + $1.temperatures.count }
     }
 
-    private var filteredMedRecords: [MedicationRecord] {
-        childMedRecords.filter { isInRange($0.timestamp) }
+    private var medCount: Int {
+        filteredRecords.reduce(0) { $0 + $1.medications.count }
     }
 
     private var totalRecordCount: Int {
-        filteredTempRecords.count + filteredMedRecords.count
+        filteredRecords.count
     }
 
     private func isInRange(_ date: Date) -> Bool {
@@ -103,7 +101,7 @@ struct ExportSheet: View {
         case .last3Months:
             return (cal.date(byAdding: .month, value: -3, to: now) ?? now, now)
         case .allTime:
-            let allDates = filteredTempRecords.map { $0.timestamp } + filteredMedRecords.map { $0.timestamp }
+            let allDates = filteredRecords.map { $0.timestamp }
             return (allDates.min() ?? now, allDates.max() ?? now)
         case .custom:
             return (customStart, customEnd)
@@ -135,15 +133,21 @@ struct ExportSheet: View {
                 // 3.4 Real-time preview
                 Section("导出预览") {
                     HStack {
-                        Label("体温记录", systemImage: "thermometer")
+                        Label("体温次数", systemImage: "thermometer")
                         Spacer()
-                        Text("\(filteredTempRecords.count) 条")
+                        Text("\(tempCount) 次")
                             .foregroundStyle(.secondary)
                     }
                     HStack {
-                        Label("用药记录", systemImage: "pill")
+                        Label("用药次数", systemImage: "pill")
                         Spacer()
-                        Text("\(filteredMedRecords.count) 条")
+                        Text("\(medCount) 次")
+                            .foregroundStyle(.secondary)
+                    }
+                    HStack {
+                        Label("记录条数", systemImage: "doc.text")
+                        Spacer()
+                        Text("\(totalRecordCount) 条")
                             .foregroundStyle(.secondary)
                     }
                     // 3.5 No-record hint
@@ -194,10 +198,7 @@ struct ExportSheet: View {
         defer { isExporting = false }
 
         let exporter = CSVExporter()
-        let csvString = exporter.export(
-            temperatureRecords: filteredTempRecords,
-            medicationRecords: filteredMedRecords
-        )
+        let csvString = exporter.export(records: filteredRecords)
         let range = exportDateRange
         let fileName = exporter.generateFileName(childName: child.name, startDate: range.start, endDate: range.end)
 

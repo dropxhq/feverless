@@ -63,13 +63,10 @@ struct ImportMappingConfig: Codable {
     var columnMappings: [String: ColumnMappingRule]
     /// Maps internalFieldName → [originalValue → targetRawValue]
     var valueMappings: [String: [String: String]]
-    /// User-defined keyword extensions: keyword → MedicationType.rawValue
-    var keywordExtensions: [String: String]
 
     init() {
         columnMappings = [:]
         valueMappings = [:]
-        keywordExtensions = [:]
     }
 }
 

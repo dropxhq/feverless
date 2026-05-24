@@ -10,7 +10,9 @@ import WidgetKit
 struct RecordView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
-    @Query(sort: \MedicationRecord.timestamp, order: .reverse) private var allMedRecords: [MedicationRecord]
+    @Query(sort: \DataRecord.timestamp, order: .reverse) private var allRecords: [DataRecord]
+    @ObservedObject private var catalog = MedicationCatalog.shared
+    @ObservedObject private var positionCatalog = TemperaturePositionCatalog.shared
 
     let child: Child
     let initialTab: RecordTab
@@ -18,9 +20,9 @@ struct RecordView: View {
     @State private var selectedTab: RecordTab
     @State private var tempInteger: Int = 37
     @State private var tempDecimal: Int = 5
-    @State private var selectedMethod: MeasurementMethod = .axillary
-    @State private var concurrentMed: MedicationType? = nil
-    @State private var selectedMedType: MedicationType = .ibuprofen
+    @State private var selectedPositionName: String = ""
+    @State private var concurrentMedName: String? = nil
+    @State private var selectedMedName: String = "布洛芬"
     @State private var recordTime: Date = Date()
     @State private var notes: String = ""
     @State private var isPressing: Bool = false
@@ -41,12 +43,17 @@ struct RecordView: View {
         return max(0, min(1, (currentTemp - minTemp) / (maxTemp - minTemp)))
     }
 
-    private var childMedRecords: [MedicationRecord] {
-        allMedRecords.filter { $0.childId == child.id }
+    private var childRecords: [DataRecord] {
+        allRecords.filter { $0.childId == child.id }
+    }
+
+    private var selectedPosition: TemperaturePositionDefinition? {
+        positionCatalog.find(selectedPositionName) ?? positionCatalog.all.first
     }
 
     private var isTempFever: Bool {
-        currentTemp >= selectedMethod.feverThreshold
+        let threshold = selectedPosition?.feverThreshold ?? 37.5
+        return currentTemp >= threshold
     }
 
     var body: some View {
@@ -71,6 +78,11 @@ struct RecordView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("取消") { dismiss() }
+                }
+            }
+            .onAppear {
+                if selectedPositionName.isEmpty {
+                    selectedPositionName = positionCatalog.all.first?.canonicalName ?? "腋下"
                 }
             }
         }
@@ -168,21 +180,21 @@ struct RecordView: View {
                     .padding(.horizontal)
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
-                        ForEach(MeasurementMethod.allCases, id: \.self) { method in
-                            Button(method.displayName) {
-                                selectedMethod = method
+                        ForEach(positionCatalog.all, id: \.canonicalName) { pos in
+                            Button(pos.canonicalName) {
+                                selectedPositionName = pos.canonicalName
                             }
                             .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(selectedMethod == method ? Color.blue : Color.primary.opacity(0.7))
+                            .foregroundStyle(selectedPositionName == pos.canonicalName ? Color.blue : Color.primary.opacity(0.7))
                             .padding(.horizontal, 14)
                             .padding(.vertical, 8)
                             .background(
                                 RoundedRectangle(cornerRadius: 20)
-                                    .fill(selectedMethod == method ? Color.blue.opacity(0.08) : Color.gray.opacity(0.1))
+                                    .fill(selectedPositionName == pos.canonicalName ? Color.blue.opacity(0.08) : Color.gray.opacity(0.1))
                                     .overlay(
                                         RoundedRectangle(cornerRadius: 20)
                                             .strokeBorder(
-                                                selectedMethod == method ? Color.blue.opacity(0.3) : Color.clear,
+                                                selectedPositionName == pos.canonicalName ? Color.blue.opacity(0.3) : Color.clear,
                                                 lineWidth: 1.5
                                             )
                                     )
@@ -224,13 +236,13 @@ struct RecordView: View {
     private var concurrentMedPicker: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                medChip(label: "无", isSelected: concurrentMed == nil)  { concurrentMed = nil }
-                medChip(label: MedicationType.ibuprofen.emoji + " " + MedicationType.ibuprofen.displayName,
-                        isSelected: concurrentMed == .ibuprofen)           { concurrentMed = .ibuprofen }
-                medChip(label: MedicationType.acetaminophen.emoji + " " + MedicationType.acetaminophen.displayName,
-                        isSelected: concurrentMed == .acetaminophen)       { concurrentMed = .acetaminophen }
-                medChip(label: MedicationType.other.emoji + " " + MedicationType.other.displayName,
-                        isSelected: concurrentMed == .other)               { concurrentMed = .other }
+                medChip(label: "无", isSelected: concurrentMedName == nil) { concurrentMedName = nil }
+                ForEach(catalog.all) { def in
+                    medChip(
+                        label: catalog.emoji(for: def.canonicalName) + " " + def.canonicalName,
+                        isSelected: concurrentMedName == def.canonicalName
+                    ) { concurrentMedName = def.canonicalName }
+                }
             }
             .padding(.horizontal)
         }
@@ -264,9 +276,9 @@ struct RecordView: View {
                     .foregroundStyle(.secondary)
                     .padding(.horizontal)
 
-                medicationTypeRow(.ibuprofen)
-                medicationTypeRow(.acetaminophen)
-                medicationTypeRow(.other)
+                ForEach(catalog.all) { def in
+                    medicationTypeRow(def)
+                }
             }
 
             timeSection
@@ -286,22 +298,24 @@ struct RecordView: View {
     }
 
     @ViewBuilder
-    private func medicationTypeRow(_ med: MedicationType) -> some View {
+    private func medicationTypeRow(_ def: MedicationDefinition) -> some View {
         let avail = MedicationSafetyViewModel.availability(
-            for: med, childId: child.id, records: childMedRecords
+            forMedicationName: def.canonicalName, childId: child.id, records: childRecords
         )
         VStack(alignment: .leading, spacing: 4) {
             Button {
-                selectedMedType = med
+                selectedMedName = def.canonicalName
             } label: {
                 HStack {
-                    Text(med.emoji + " " + med.displayName)
+                    Text(catalog.emoji(for: def.canonicalName) + " " + def.canonicalName)
                         .font(.system(size: 13, weight: .medium))
                     Spacer()
-                    Text(avail.displayText)
-                        .font(.caption)
-                        .foregroundStyle(avail.isAvailable ? Color.green : avail.statusColor)
-                    if selectedMedType == med {
+                    if def.hasReminder {
+                        Text(avail.displayText)
+                            .font(.caption)
+                            .foregroundStyle(avail.isAvailable ? Color.green : avail.statusColor)
+                    }
+                    if selectedMedName == def.canonicalName {
                         Image(systemName: "checkmark.circle.fill")
                             .foregroundStyle(.blue)
                     }
@@ -309,7 +323,7 @@ struct RecordView: View {
                 .padding()
                 .background(
                     RoundedRectangle(cornerRadius: 12)
-                        .fill(selectedMedType == med
+                        .fill(selectedMedName == def.canonicalName
                               ? Color.blue.opacity(0.1)
                               : Color.gray.opacity(0.08))
                 )
@@ -317,7 +331,7 @@ struct RecordView: View {
             .foregroundStyle(.primary)
             .padding(.horizontal)
 
-            if case .cooldown = avail, selectedMedType == med {
+            if def.hasReminder, case .cooldown = avail, selectedMedName == def.canonicalName {
                 Label("仍在冷却期，请谨慎服用", systemImage: "exclamationmark.triangle.fill")
                     .font(.caption)
                     .foregroundStyle(.orange)
@@ -401,36 +415,34 @@ struct RecordView: View {
     }
 
     private func save() {
+        let positionName = selectedPosition?.canonicalName ?? (positionCatalog.all.first?.canonicalName ?? "腋下")
+
         switch selectedTab {
         case .temperature:
-            let tempRecord = TemperatureRecord(
-                childId: child.id,
-                value: currentTemp,
-                method: selectedMethod,
-                timestamp: recordTime,
-                notes: notes
-            )
-            modelContext.insert(tempRecord)
-
-            if let med = concurrentMed {
-                let medRecord = MedicationRecord(
-                    childId: child.id,
-                    type: med,
-                    timestamp: recordTime,
-                    concurrentTemperature: currentTemp,
-                    notes: ""
-                )
-                modelContext.insert(medRecord)
+            let reading = TemperatureReading(positionRaw: positionName, value: currentTemp)
+            var medications: [MedicationUsage] = []
+            if let medName = concurrentMedName {
+                medications.append(MedicationUsage(medicationNameRaw: medName))
             }
+            let record = DataRecord(
+                childId: child.id,
+                timestamp: recordTime,
+                notes: notes,
+                temperatures: [reading],
+                medications: medications
+            )
+            modelContext.insert(record)
 
         case .medication:
-            let medRecord = MedicationRecord(
+            let usage = MedicationUsage(medicationNameRaw: selectedMedName)
+            let record = DataRecord(
                 childId: child.id,
-                type: selectedMedType,
                 timestamp: recordTime,
-                notes: notes
+                notes: notes,
+                temperatures: [],
+                medications: [usage]
             )
-            modelContext.insert(medRecord)
+            modelContext.insert(record)
         }
 
         try? modelContext.save()

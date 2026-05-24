@@ -33,7 +33,7 @@ struct ColumnMappingSheet: View {
         init(header: String, autoResolvedField: String?, existingRule: ColumnMappingRule?) {
             self.header = header
             self.autoResolvedField = autoResolvedField
-            self.impliedMethod = MeasurementMethod.axillary.rawValue
+            self.impliedMethod = TemperaturePositionCatalog.shared.all.first?.canonicalName ?? "腋下"
             self.extractsMedications = false
             self.targetField = autoResolvedField
 
@@ -43,7 +43,7 @@ struct ColumnMappingSheet: View {
                     self.targetField = f
                 case .compound(let f, let implied):
                     self.targetField = f
-                    self.impliedMethod = implied["method"] ?? MeasurementMethod.axillary.rawValue
+                    self.impliedMethod = implied["method"] ?? TemperaturePositionCatalog.shared.all.first?.canonicalName ?? "腋下"
                 case .keywordExtract(let f, let extracts):
                     self.targetField = f
                     self.extractsMedications = extracts
@@ -59,8 +59,7 @@ struct ColumnMappingSheet: View {
     private let targetFieldOptions: [(id: String, displayName: String)] = [
         (id: "timestamp",       displayName: "时间"),
         (id: "record_type",     displayName: "记录类型"),
-        (id: "value",           displayName: "体温"),
-        (id: "method",          displayName: "测量方式"),
+        (id: "value",           displayName: "体温列"),
         (id: "medication_type", displayName: "药物类型"),
         (id: "notes",           displayName: "备注"),
     ]
@@ -168,16 +167,16 @@ struct ColumnMappingSheet: View {
                 }
                 .pickerStyle(.menu)
 
-                // 6.3 Compound inline expansion when "体温" is selected
+                // 6.3 Compound inline expansion when "体温列" is selected
                 if entry.wrappedValue.targetField == "value" {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("指定测量方式：")
+                        Text("指定测量位置：")
                             .font(.caption)
                             .foregroundStyle(.secondary)
 
-                        Picker("测量方式", selection: entry.impliedMethod) {
-                            ForEach(MeasurementMethod.allCases, id: \.rawValue) { method in
-                                Text(method.displayName).tag(method.rawValue)
+                        Picker("测量位置", selection: entry.impliedMethod) {
+                            ForEach(TemperaturePositionCatalog.shared.all, id: \.canonicalName) { def in
+                                Text(def.canonicalName).tag(def.canonicalName)
                             }
                         }
                         .pickerStyle(.menu)
@@ -240,8 +239,7 @@ struct ColumnMappingSheet: View {
             } else {
                 rule = .ignore
             }
-            // 1.1 Don't allow .ignore to overwrite an existing non-ignore rule
-            // (handles duplicate/empty column names: the first meaningful rule wins)
+            // Don't allow .ignore to overwrite an existing non-ignore rule
             if case .ignore = rule, let existing = newConfig.columnMappings[entry.header] {
                 if case .ignore = existing { } else { continue }
             }

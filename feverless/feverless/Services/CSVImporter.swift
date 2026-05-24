@@ -22,19 +22,16 @@ enum CSVImportError: LocalizedError {
 // MARK: - 1.5 Parse result (extended with mappingReport)
 
 struct CSVParseResult {
-    let temperatureRows: [TemperatureRecord]
-    let medicationRows: [MedicationRecord]
+    let records: [DataRecord]
     let skippedCount: Int
     var mappingReport: ImportMappingReport
 
     init(
-        temperatureRows: [TemperatureRecord],
-        medicationRows: [MedicationRecord],
+        records: [DataRecord],
         skippedCount: Int,
         mappingReport: ImportMappingReport = ImportMappingReport()
     ) {
-        self.temperatureRows = temperatureRows
-        self.medicationRows = medicationRows
+        self.records = records
         self.skippedCount = skippedCount
         self.mappingReport = mappingReport
     }
@@ -126,7 +123,7 @@ struct CSVImporter {
 
     func parseRows(_ rows: [[String]], childId: UUID, config: ImportMappingConfig) throws -> CSVParseResult {
         guard let headerRow = rows.first else {
-            return CSVParseResult(temperatureRows: [], medicationRows: [], skippedCount: 0)
+            return CSVParseResult(records: [], skippedCount: 0)
         }
 
         let headers = headerRow.map { $0.trimmingCharacters(in: .whitespaces) }
@@ -168,28 +165,25 @@ struct CSVImporter {
         }
         guard hasTimestamp else { throw CSVImportError.missingColumn("时间") }
 
-        var temps: [TemperatureRecord] = []
-        var meds: [MedicationRecord] = []
+        var outputRecords: [DataRecord] = []
 
         for (offset, fields) in rows.dropFirst().enumerated() {
             let lineNum = offset + 2
             guard !fields.isEmpty, !(fields.count == 1 && fields[0].isEmpty) else { continue }
 
-            // --- Collect simple field values ---
             var tsString = ""
             var notesValue = ""
-            var concurrentTempStr = ""
             var simpleRecordType = ""
             var simpleValue = ""
             var simpleMethod = ""
             var simpleMedType = ""
 
-            // Compound entries: each produces a separate temperature (or medication) record
-            var compoundTemps: [(value: Double, method: MeasurementMethod)] = []
-            var compoundMeds: [(type: MedicationType, ct: Double?)] = []
-
-            // Keyword-extracted medication types
-            var keywordMedTypes: [MedicationType] = []
+            // Compound temperature columns: (value, positionCanonicalName)
+            var compoundTemps: [(value: Double, positionName: String)] = []
+            // Compound medication columns: canonical name
+            var compoundMeds: [String] = []
+            // Keyword-extracted canonical medication names
+            var keywordMedNames: [String] = []
 
             for colInfo in columnInfos {
                 let rawVal = colInfo.index < fields.count
@@ -204,7 +198,6 @@ struct CSVImporter {
                     switch field {
                     case "timestamp":   tsString = rawVal
                     case "notes":       notesValue = rawVal
-                    case "concurrent_temperature": concurrentTempStr = rawVal
                     case "record_type":
                         let resolved = aliasTable.resolveValue(rawVal, forField: "record_type", config: config) ?? rawVal
                         if resolved != rawVal && !rawVal.isEmpty {
@@ -217,20 +210,22 @@ struct CSVImporter {
                     default: break
                     }
 
-                // 4.4 Compound: column value is a measurement value; implied values set other fields
+                // Compound: column value is a temperature measurement; implied values set position
                 case .compound(_, let impliedValues):
                     guard !rawVal.isEmpty else { continue }
                     let rt = impliedValues["record_type"] ?? "temperature"
                     if rt == "temperature" {
                         guard let dbl = Double(rawVal) else { continue }
-                        let methodRaw = impliedValues["method"] ?? MeasurementMethod.axillary.rawValue
-                        let method = MeasurementMethod(rawValue: methodRaw) ?? .axillary
-                        compoundTemps.append((value: dbl, method: method))
+                        // Resolve the implied method to a position canonical name
+                        let methodRaw = impliedValues["method"] ?? "腋下"
+                        let positionName = aliasTable.resolveValue(methodRaw, forField: "method", config: config)
+                            ?? TemperaturePositionCatalog.shared.all.first?.canonicalName
+                            ?? "腋下"
+                        compoundTemps.append((value: dbl, positionName: positionName))
                     } else if rt == "medication" {
-                        let medRaw = impliedValues["medication_type"] ?? MedicationType.other.rawValue
-                        let medType = MedicationType(rawValue: medRaw) ?? .other
-                        let ctStr = impliedValues["concurrent_temperature"] ?? ""
-                        compoundMeds.append((type: medType, ct: ctStr.isEmpty ? nil : Double(ctStr)))
+                        let medRaw = impliedValues["medication_type"] ?? "其他"
+                        let canonicalName = aliasTable.resolveValue(medRaw, forField: "medication_type", config: config) ?? medRaw
+                        compoundMeds.append(canonicalName)
                     }
 
                 case .keywordExtract(let field, let extractsMedications):
@@ -239,9 +234,8 @@ struct CSVImporter {
                         else if f == "timestamp" { tsString = rawVal }
                     }
                     if extractsMedications && !rawVal.isEmpty {
-                        let matched = keywordMatcher.extract(from: rawVal, userExtensions: config.keywordExtensions)
-                        keywordMedTypes.append(contentsOf: matched)
-                        // 4.5 Collect keyword extraction count
+                        let matched = keywordMatcher.extract(from: rawVal)
+                        keywordMedNames.append(contentsOf: matched)
                         report.keywordExtractionCount += matched.count
                     }
                 }
@@ -252,27 +246,21 @@ struct CSVImporter {
                 throw CSVImportError.invalidTimestamp(line: lineNum, value: tsString)
             }
 
-            let ct = concurrentTempStr.isEmpty ? nil : Double(concurrentTempStr)
+            var temperatures: [TemperatureReading] = []
+            var medications: [MedicationUsage] = []
 
-            // Generate temperature records from compound columns
+            // Process compound temperature columns (multi-position per row)
             for entry in compoundTemps {
-                temps.append(TemperatureRecord(
-                    childId: childId, value: entry.value,
-                    method: entry.method, timestamp: date, notes: notesValue
-                ))
+                temperatures.append(TemperatureReading(positionRaw: entry.positionName, value: entry.value))
             }
 
-            // Generate medication records from compound columns
-            for entry in compoundMeds {
-                meds.append(MedicationRecord(
-                    childId: childId, type: entry.type,
-                    timestamp: date, concurrentTemperature: entry.ct, notes: notesValue
-                ))
+            // Process compound medication columns
+            for name in compoundMeds {
+                medications.append(MedicationUsage(medicationNameRaw: name))
             }
 
-            // Process simple columns when no compound columns determined the records
+            // Process simple columns when no compound columns present
             if compoundTemps.isEmpty && compoundMeds.isEmpty {
-                // Infer record type when not explicitly stated
                 let effectiveRT: String
                 if !simpleRecordType.isEmpty {
                     effectiveRT = simpleRecordType
@@ -292,26 +280,20 @@ struct CSVImporter {
                         }
                         break
                     }
-                    let resolvedMethod = aliasTable.resolveValue(simpleMethod, forField: "method", config: config) ?? MeasurementMethod.axillary.rawValue
-                    if resolvedMethod != simpleMethod && !simpleMethod.isEmpty {
+                    let resolvedPosition = aliasTable.resolveValue(simpleMethod, forField: "method", config: config)
+                        ?? TemperaturePositionCatalog.shared.all.first?.canonicalName
+                        ?? "腋下"
+                    if resolvedPosition != simpleMethod && !simpleMethod.isEmpty {
                         report.recordValueMapping(field: "method", originalValue: simpleMethod)
                     }
-                    let method = MeasurementMethod(rawValue: resolvedMethod) ?? .axillary
-                    temps.append(TemperatureRecord(
-                        childId: childId, value: dbl,
-                        method: method, timestamp: date, notes: notesValue
-                    ))
+                    temperatures.append(TemperatureReading(positionRaw: resolvedPosition, value: dbl))
 
                 case "medication":
-                    let resolvedMed = aliasTable.resolveValue(simpleMedType, forField: "medication_type", config: config) ?? MedicationType.other.rawValue
+                    let resolvedMed = aliasTable.resolveValue(simpleMedType, forField: "medication_type", config: config) ?? "其他"
                     if resolvedMed != simpleMedType && !simpleMedType.isEmpty {
                         report.recordValueMapping(field: "medication_type", originalValue: simpleMedType)
                     }
-                    let medType = MedicationType(rawValue: resolvedMed) ?? .other
-                    meds.append(MedicationRecord(
-                        childId: childId, type: medType,
-                        timestamp: date, concurrentTemperature: ct, notes: notesValue
-                    ))
+                    medications.append(MedicationUsage(medicationNameRaw: resolvedMed))
 
                 default:
                     break
@@ -319,17 +301,24 @@ struct CSVImporter {
             }
 
             // Add keyword-extracted medication records
-            for medType in keywordMedTypes {
-                meds.append(MedicationRecord(
-                    childId: childId, type: medType,
-                    timestamp: date, concurrentTemperature: ct, notes: notesValue
-                ))
+            for canonicalName in keywordMedNames {
+                medications.append(MedicationUsage(medicationNameRaw: canonicalName))
             }
+
+            // Task 7.4: Discard empty records
+            guard !temperatures.isEmpty || !medications.isEmpty || !notesValue.isEmpty else { continue }
+
+            outputRecords.append(DataRecord(
+                childId: childId,
+                timestamp: date,
+                notes: notesValue,
+                temperatures: temperatures,
+                medications: medications
+            ))
         }
 
         return CSVParseResult(
-            temperatureRows: temps,
-            medicationRows: meds,
+            records: outputRecords,
             skippedCount: 0,
             mappingReport: report
         )
@@ -339,21 +328,14 @@ struct CSVImporter {
 
     func deduplicated(
         parseResult: CSVParseResult,
-        existingTemperatureRecords: [TemperatureRecord],
-        existingMedicationRecords: [MedicationRecord]
+        existingRecords: [DataRecord]
     ) -> CSVParseResult {
-        let existingTempKeys = Set(existingTemperatureRecords.map { Int($0.timestamp.timeIntervalSince1970) })
-        let existingMedKeys  = Set(existingMedicationRecords.map  { Int($0.timestamp.timeIntervalSince1970) })
-
-        let newTemps = parseResult.temperatureRows.filter { !existingTempKeys.contains(Int($0.timestamp.timeIntervalSince1970)) }
-        let newMeds  = parseResult.medicationRows.filter  { !existingMedKeys.contains(Int($0.timestamp.timeIntervalSince1970)) }
-
-        let skipped = (parseResult.temperatureRows.count - newTemps.count)
-                    + (parseResult.medicationRows.count  - newMeds.count)
+        let existingKeys = Set(existingRecords.map { Int($0.timestamp.timeIntervalSince1970) })
+        let newRecords = parseResult.records.filter { !existingKeys.contains(Int($0.timestamp.timeIntervalSince1970)) }
+        let skipped = parseResult.records.count - newRecords.count
 
         return CSVParseResult(
-            temperatureRows: newTemps,
-            medicationRows: newMeds,
+            records: newRecords,
             skippedCount: skipped,
             mappingReport: parseResult.mappingReport
         )

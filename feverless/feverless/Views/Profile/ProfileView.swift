@@ -12,8 +12,7 @@ import UniformTypeIdentifiers
 struct ProfileView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Child.createdAt) private var children: [Child]
-    @Query(sort: \TemperatureRecord.timestamp, order: .reverse) private var allTempRecords: [TemperatureRecord]
-    @Query(sort: \MedicationRecord.timestamp,  order: .reverse) private var allMedRecords:  [MedicationRecord]
+    @Query(sort: \DataRecord.timestamp, order: .reverse) private var allRecords: [DataRecord]
 
     @Binding var selectedChildIdString: String
     @State private var showAddChild = false
@@ -38,6 +37,8 @@ struct ProfileView: View {
     @State private var showValueMappingSheet = false
     @State private var unresolvedValueGroups: [UnresolvedValueGroup] = []
     @State private var hasKeywordColumns: Bool = false
+    @State private var columnMappingDidComplete: Bool = false
+    @State private var valueMappingDidComplete: Bool = false
 
     // Toast
     @State private var toastMessage: String?
@@ -89,6 +90,19 @@ struct ProfileView: View {
                         .foregroundStyle(.primary)
                     }
                 }
+
+                // 7.4 Medication management section
+                NavigationLink {
+                    MedicationCatalogView()
+                } label: {
+                    Label("药品管理", systemImage: "pills.circle")
+                }
+
+                NavigationLink {
+                    TemperaturePositionCatalogView(isSheet: false)
+                } label: {
+                    Label("体温位置管理", systemImage: "thermometer.medium")
+                }
             }
             .navigationTitle("我的")
             .toolbar {
@@ -139,24 +153,32 @@ struct ProfileView: View {
                 handleFileImport(result: result)
             }
             // 9.2 Column mapping sheet
-            .sheet(isPresented: $showColumnMappingSheet) {
+            .sheet(isPresented: $showColumnMappingSheet, onDismiss: {
+                guard columnMappingDidComplete else { return }
+                columnMappingDidComplete = false
+                proceedToValueDetection()
+            }) {
                 ColumnMappingSheet(
                     allHeaders: csvRawRows.first?.map { $0.trimmingCharacters(in: .whitespaces) } ?? [],
                     config: pendingConfig
                 ) { updatedConfig in
                     pendingConfig = updatedConfig
-                    proceedToValueDetection()
+                    columnMappingDidComplete = true
                 }
             }
             // 9.3 Value mapping sheet
-            .sheet(isPresented: $showValueMappingSheet) {
+            .sheet(isPresented: $showValueMappingSheet, onDismiss: {
+                guard valueMappingDidComplete else { return }
+                valueMappingDidComplete = false
+                proceedToParse()
+            }) {
                 ValueMappingSheet(
                     valueGroups: unresolvedValueGroups,
                     config: pendingConfig,
                     hasKeywordColumns: hasKeywordColumns
                 ) { updatedConfig in
                     pendingConfig = updatedConfig
-                    proceedToParse()
+                    valueMappingDidComplete = true
                 }
             }
             // Import error alert
@@ -199,10 +221,11 @@ struct ProfileView: View {
     // MARK: - Latest temp helpers
 
     private func latestTempSubtitle(for child: Child) -> String {
-        guard let record = allTempRecords.first(where: { $0.childId == child.id }) else {
+        guard let record = allRecords.first(where: { $0.childId == child.id }),
+              let reading = record.temperatures.first else {
             return "暂无体温记录"
         }
-        return "最近体温: \(String(format: "%.1f", record.value))°C · \(relativeTimeString(record.timestamp))"
+        return "最近体温: \(String(format: "%.1f", reading.value))°C · \(relativeTimeString(record.timestamp))"
     }
 
     private func relativeTimeString(_ date: Date) -> String {
@@ -310,17 +333,13 @@ struct ProfileView: View {
             let parsed = try importer.parseRows(csvRawRows, childId: child.id, config: pendingConfig)
 
             let childId = child.id
-            let existingTemps = (try? modelContext.fetch(
-                FetchDescriptor<TemperatureRecord>(predicate: #Predicate { $0.childId == childId })
-            )) ?? []
-            let existingMeds = (try? modelContext.fetch(
-                FetchDescriptor<MedicationRecord>(predicate: #Predicate { $0.childId == childId })
+            let existingRecords = (try? modelContext.fetch(
+                FetchDescriptor<DataRecord>(predicate: #Predicate { $0.childId == childId })
             )) ?? []
 
             let deduped = importer.deduplicated(
                 parseResult: parsed,
-                existingTemperatureRecords: existingTemps,
-                existingMedicationRecords: existingMeds
+                existingRecords: existingRecords
             )
 
             importPreviewResult = deduped
@@ -350,18 +369,12 @@ struct ProfileView: View {
     private func deleteChild(_ child: Child) {
         let childId = child.id
 
-        let tempDescriptor = FetchDescriptor<TemperatureRecord>(
-            predicate: #Predicate { $0.childId == childId }
-        )
-        let medDescriptor = FetchDescriptor<MedicationRecord>(
+        let recordDescriptor = FetchDescriptor<DataRecord>(
             predicate: #Predicate { $0.childId == childId }
         )
 
-        if let temps = try? modelContext.fetch(tempDescriptor) {
-            temps.forEach { modelContext.delete($0) }
-        }
-        if let meds = try? modelContext.fetch(medDescriptor) {
-            meds.forEach { modelContext.delete($0) }
+        if let records = try? modelContext.fetch(recordDescriptor) {
+            records.forEach { modelContext.delete($0) }
         }
 
         if selectedChildIdString == child.id.uuidString {
