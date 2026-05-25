@@ -73,6 +73,7 @@ struct ChartView: View {
     @State private var isSelecting: Bool = false
     @State private var selectedIds: Set<UUID> = []
     @State private var showBatchDeleteConfirm: Bool = false
+    @State private var openSwipeRowId: UUID? = nil
 
     private var range: (start: Date, end: Date) {
         timeRange == .custom
@@ -837,6 +838,7 @@ struct ChartView: View {
             .background(isSelected ? Color.blue.opacity(0.06) : Color.clear)
             .contentShape(Rectangle())
             .onTapGesture {
+                openSwipeRowId = nil
                 if isSelecting {
                     if isSelected { selectedIds.remove(record.id) } else { selectedIds.insert(record.id) }
                     if selectedIds.isEmpty { isSelecting = false }
@@ -849,7 +851,7 @@ struct ChartView: View {
                 isSelecting = true
                 selectedIds.insert(record.id)
             }
-            .swipeToDelete(isActive: !isSelecting) {
+            .swipeToDelete(id: record.id, openSwipeId: $openSwipeRowId, isActive: !isSelecting) {
                 deleteRecord(record)
             }
 

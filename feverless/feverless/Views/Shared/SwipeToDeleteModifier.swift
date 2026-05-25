@@ -10,11 +10,15 @@ struct SwipeToDeleteModifier: ViewModifier {
     @State private var isConfirming: Bool = false
     @State private var isDragging: Bool = false
     @State private var dragBaseOffset: CGFloat = 0
+    let id: UUID
+    @Binding var openSwipeId: UUID?
     let isActive: Bool       // set false in multi-select mode
     let deleteButtonWidth: CGFloat
     let onDelete: () -> Void
 
-    init(isActive: Bool, deleteButtonWidth: CGFloat = 80, onDelete: @escaping () -> Void) {
+    init(id: UUID, openSwipeId: Binding<UUID?>, isActive: Bool, deleteButtonWidth: CGFloat = 80, onDelete: @escaping () -> Void) {
+        self.id = id
+        self._openSwipeId = openSwipeId
         self.isActive = isActive
         self.deleteButtonWidth = deleteButtonWidth
         self.onDelete = onDelete
@@ -75,6 +79,8 @@ struct SwipeToDeleteModifier: ViewModifier {
                         dragBaseOffset = offset
                         // Any new drag resets confirming state
                         isConfirming = false
+                        // Notify other rows to close
+                        openSwipeId = id
                     }
                     let newOffset = dragBaseOffset + dx
                     withAnimation(.interactiveSpring()) {
@@ -94,6 +100,10 @@ struct SwipeToDeleteModifier: ViewModifier {
         .onChange(of: isActive) { _, newValue in
             if !newValue { closeRow() }
         }
+        .onChange(of: openSwipeId) { _, newId in
+            // Another row opened — close this one
+            if newId != id { closeRow() }
+        }
     }
 
     private func closeRow() {
@@ -105,7 +115,7 @@ struct SwipeToDeleteModifier: ViewModifier {
 }
 
 extension View {
-    func swipeToDelete(isActive: Bool, onDelete: @escaping () -> Void) -> some View {
-        modifier(SwipeToDeleteModifier(isActive: isActive, onDelete: onDelete))
+    func swipeToDelete(id: UUID, openSwipeId: Binding<UUID?>, isActive: Bool, onDelete: @escaping () -> Void) -> some View {
+        modifier(SwipeToDeleteModifier(id: id, openSwipeId: openSwipeId, isActive: isActive, onDelete: onDelete))
     }
 }
