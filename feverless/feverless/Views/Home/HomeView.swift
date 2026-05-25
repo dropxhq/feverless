@@ -359,15 +359,7 @@ struct HomeView: View {
             }.max()
 
         HStack(spacing: 12) {
-            let iconColor = catalog.color(for: definition.canonicalName)
-            RoundedRectangle(cornerRadius: 10)
-                .fill(iconColor.opacity(0.12))
-                .frame(width: 36, height: 36)
-                .overlay(
-                    Image(systemName: "pill.fill")
-                        .font(.system(size: 14))
-                        .foregroundStyle(iconColor)
-                )
+            catalog.iconView(for: definition.canonicalName, size: 36)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(definition.canonicalName)
@@ -582,15 +574,7 @@ struct HomeView: View {
 
     @ViewBuilder
     private func medRowContent(usage: MedicationUsage, timestamp: Date, useRelative: Bool) -> some View {
-        let color = MedicationCatalog.shared.color(for: usage.medicationNameRaw)
-        RoundedRectangle(cornerRadius: 10)
-            .fill(color.opacity(0.12))
-            .frame(width: 34, height: 34)
-            .overlay(
-                Image(systemName: "pill.fill")
-                    .font(.system(size: 14))
-                    .foregroundStyle(color)
-            )
+        MedicationCatalog.shared.iconView(for: usage.medicationNameRaw)
         VStack(alignment: .leading, spacing: 2) {
             Text(usage.medicationNameRaw)
                 .font(.system(size: 14, weight: .semibold))
@@ -619,7 +603,6 @@ struct HomeView: View {
     @ViewBuilder
     private func combinedRowContent(reading: TemperatureReading, usage: MedicationUsage, timestamp: Date, useRelative: Bool) -> some View {
         let isFever = reading.isFever()
-        let medColor = MedicationCatalog.shared.color(for: usage.medicationNameRaw)
         VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 8) {
                 RoundedRectangle(cornerRadius: 8)
@@ -645,14 +628,7 @@ struct HomeView: View {
                     .background(RoundedRectangle(cornerRadius: 8).fill(isFever ? Color.red.opacity(0.08) : Color.green.opacity(0.1)))
             }
             HStack(spacing: 8) {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(medColor.opacity(0.12))
-                    .frame(width: 28, height: 28)
-                    .overlay(
-                        Image(systemName: "pill.fill")
-                            .font(.system(size: 12))
-                            .foregroundStyle(medColor)
-                    )
+                MedicationCatalog.shared.iconView(for: usage.medicationNameRaw, size: 28)
                 Text(usage.medicationNameRaw)
                     .font(.system(size: 13, weight: .medium))
             }

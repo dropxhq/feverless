@@ -159,4 +159,19 @@ final class MedicationCatalog: ObservableObject {
         all.first(where: { $0.canonicalName == canonicalName }).map { iconBackground(for: $0) } ?? Color.gray.opacity(0.12)
     }
 
+    /// 全局统一的药品图标视图（pill.fill + 颜色）。
+    /// 所有视图应通过此方法渲染药品图标，以保证全局风格一致。
+    @ViewBuilder
+    func iconView(for canonicalName: String, size: CGFloat = 34) -> some View {
+        let c = color(for: canonicalName)
+        RoundedRectangle(cornerRadius: size * 0.29)
+            .fill(c.opacity(0.12))
+            .frame(width: size, height: size)
+            .overlay(
+                Image(systemName: "pill.fill")
+                    .font(.system(size: size * 0.41))
+                    .foregroundStyle(c)
+            )
+    }
+
 }

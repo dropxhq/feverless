@@ -583,10 +583,7 @@ struct ChartView: View {
                         .foregroundStyle(medColor.opacity(0.6))
                         .annotation(position: .top, spacing: 4) {
                             if chartTempPoints.count <= 20 {
-                                Text(MedicationCatalog.shared.emoji(for: point.medicationNameRaw))
-                                    .font(.system(size: 10))
-                                    .padding(3)
-                                    .background(Circle().fill(medColor.opacity(0.15)))
+                                MedicationCatalog.shared.iconView(for: point.medicationNameRaw, size: 20)
                             }
                         }
                 }
@@ -919,15 +916,7 @@ struct ChartView: View {
 
     @ViewBuilder
     private func chartMedRowContent(usage: MedicationUsage, timestamp: Date) -> some View {
-        let color = MedicationCatalog.shared.color(for: usage.medicationNameRaw)
-        RoundedRectangle(cornerRadius: 10)
-            .fill(color.opacity(0.12))
-            .frame(width: 34, height: 34)
-            .overlay(
-                Image(systemName: "pill.fill")
-                    .font(.system(size: 14))
-                    .foregroundStyle(color)
-            )
+        MedicationCatalog.shared.iconView(for: usage.medicationNameRaw)
         VStack(alignment: .leading, spacing: 2) {
             Text(usage.medicationNameRaw)
                 .font(.system(size: 14, weight: .semibold))
@@ -941,7 +930,6 @@ struct ChartView: View {
     @ViewBuilder
     private func chartCombinedRowContent(reading: TemperatureReading, usage: MedicationUsage, timestamp: Date) -> some View {
         let isFever = reading.isFever()
-        let medColor = MedicationCatalog.shared.color(for: usage.medicationNameRaw)
         VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 8) {
                 RoundedRectangle(cornerRadius: 8)
@@ -969,14 +957,7 @@ struct ChartView: View {
                 }
             }
             HStack(spacing: 8) {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(medColor.opacity(0.12))
-                    .frame(width: 28, height: 28)
-                    .overlay(
-                        Image(systemName: "pill.fill")
-                            .font(.system(size: 12))
-                            .foregroundStyle(medColor)
-                    )
+                MedicationCatalog.shared.iconView(for: usage.medicationNameRaw, size: 28)
                 Text(usage.medicationNameRaw)
                     .font(.system(size: 13, weight: .medium))
             }

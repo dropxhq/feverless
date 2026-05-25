@@ -264,7 +264,8 @@ struct RecordView: View {
                     }
                     ForEach(catalog.all) { def in
                         medChip(
-                            label: catalog.emoji(for: def.canonicalName) + " " + def.canonicalName,
+                            label: def.canonicalName,
+                            medName: def.canonicalName,
                             isSelected: selectedMedName == def.canonicalName
                         ) {
                             selectedMedName = def.canonicalName
@@ -295,21 +296,30 @@ struct RecordView: View {
 
     // MARK: - Shared Components
 
-    private func medChip(label: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
-        Button(label, action: action)
-            .font(.system(size: 13, weight: .medium))
-            .foregroundStyle(isSelected ? Color.blue : Color.primary.opacity(0.7))
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-            .background(
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(isSelected ? Color.blue.opacity(0.08) : Color.gray.opacity(0.1))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 20)
-                            .strokeBorder(isSelected ? Color.blue.opacity(0.3) : Color.clear, lineWidth: 1.5)
-                    )
-            )
-            .buttonStyle(.plain)
+    private func medChip(label: String, medName: String? = nil, isSelected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                if let name = medName {
+                    Image(systemName: "pill.fill")
+                        .font(.system(size: 10))
+                        .foregroundStyle(catalog.color(for: name))
+                }
+                Text(label)
+            }
+        }
+        .font(.system(size: 13, weight: .medium))
+        .foregroundStyle(isSelected ? Color.blue : Color.primary.opacity(0.7))
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 20)
+                .fill(isSelected ? Color.blue.opacity(0.08) : Color.gray.opacity(0.1))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20)
+                        .strokeBorder(isSelected ? Color.blue.opacity(0.3) : Color.clear, lineWidth: 1.5)
+                )
+        )
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder
