@@ -71,30 +71,32 @@ struct HomeView: View {
         return childRecords.filter { $0.timestamp >= startOfDay }.flatMap { $0.medications }.count
     }
 
-    private var timeSinceLastMedString: String {
-        guard let lastMedRecord = childRecords.first(where: { !$0.medications.isEmpty }) else { return "—" }
-        let interval = Date().timeIntervalSince(lastMedRecord.timestamp)
-        let totalMinutes = Int(interval) / 60
-        let totalHours   = totalMinutes / 60
-        let totalDays    = totalHours / 24
-        let cal          = Calendar.current
-        let comps        = cal.dateComponents([.year, .month, .day, .hour, .minute], from: lastMedRecord.timestamp, to: Date())
-        let years  = comps.year  ?? 0
-        let months = comps.month ?? 0
-        let days   = comps.day   ?? 0
-        let hours  = comps.hour  ?? 0
+    private func formatInterval(_ interval: TimeInterval) -> String {
+        let cal = Calendar.current
+        let from = Date().addingTimeInterval(-interval)
+        let comps = cal.dateComponents([.year, .month, .day, .hour, .minute], from: from, to: Date())
+        let years  = comps.year   ?? 0
+        let months = comps.month  ?? 0
+        let days   = comps.day    ?? 0
+        let hours  = comps.hour   ?? 0
         let mins   = comps.minute ?? 0
+        let totalDays = Int(interval) / 86400
         if totalDays >= 365 {
             return months > 0 ? "\(years)年\(months)月" : "\(years)年"
         } else if totalDays >= 30 {
             return days > 0 ? "\(months)月\(days)天" : "\(months)月"
-        } else if totalHours >= 24 {
+        } else if totalDays >= 1 {
             return hours > 0 ? "\(totalDays)天\(hours)h" : "\(totalDays)天"
-        } else if totalHours > 0 {
-            return "\(totalHours)h \(mins)m"
+        } else if hours > 0 {
+            return "\(hours)h \(mins)m"
         } else {
             return "\(mins)m"
         }
+    }
+
+    private var timeSinceLastMedString: String {
+        guard let lastMedRecord = childRecords.first(where: { !$0.medications.isEmpty }) else { return "—" }
+        return formatInterval(Date().timeIntervalSince(lastMedRecord.timestamp))
     }
 
     private var lastRecordTimeString: String {
@@ -341,9 +343,7 @@ struct HomeView: View {
                     record.medications.contains { $0.medicationNameRaw != "其他" }
                 }), let lastMed = lastMainRecord.medications.first(where: { $0.medicationNameRaw != "其他" }) {
                     let interval = Date().timeIntervalSince(lastMainRecord.timestamp)
-                    let hours = Int(interval) / 3600
-                    let minutes = (Int(interval) % 3600) / 60
-                    let sinceText = hours > 0 ? "\(hours) 小时 \(minutes) 分" : "\(minutes) 分"
+                    let sinceText = formatInterval(interval)
 
                     Divider()
                     Text({
@@ -384,10 +384,8 @@ struct HomeView: View {
                     .font(.system(size: 14, weight: .semibold))
                 if let ts = lastDoseTimestamp {
                     let interval = Date().timeIntervalSince(ts)
-                    let h = Int(interval) / 3600
-                    let m = (Int(interval) % 3600) / 60
                     let timeStr = ts.formatted(date: .omitted, time: .shortened)
-                    let elapsed = h > 0 ? "\(h)h \(m)m" : "\(m)m"
+                    let elapsed = formatInterval(interval)
                     Text("\(timeStr) 服用 · 距今 \(elapsed)")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)

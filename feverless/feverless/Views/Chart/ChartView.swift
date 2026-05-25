@@ -898,20 +898,20 @@ struct ChartView: View {
                 Text("· " + reading.positionRaw)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                if isFever {
-                    Text(reading.value >= 39.0 ? "高烧" : "发烧")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(Color.red)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 2)
-                        .background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
-                }
             }
             Text(timestamp.formatted(date: .abbreviated, time: .shortened))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
         Spacer()
+        if isFever {
+            Text(reading.value >= 39.0 ? "高烧" : "发烧")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Color.red)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 3)
+                .background(RoundedRectangle(cornerRadius: 8).fill(Color.red.opacity(0.08)))
+        }
     }
 
     @ViewBuilder
