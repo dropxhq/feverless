@@ -74,9 +74,27 @@ struct HomeView: View {
     private var timeSinceLastMedString: String {
         guard let lastMedRecord = childRecords.first(where: { !$0.medications.isEmpty }) else { return "—" }
         let interval = Date().timeIntervalSince(lastMedRecord.timestamp)
-        let hours = Int(interval) / 3600
-        let minutes = (Int(interval) % 3600) / 60
-        return hours > 0 ? "\(hours)h \(minutes)m" : "\(minutes)m"
+        let totalMinutes = Int(interval) / 60
+        let totalHours   = totalMinutes / 60
+        let totalDays    = totalHours / 24
+        let cal          = Calendar.current
+        let comps        = cal.dateComponents([.year, .month, .day, .hour, .minute], from: lastMedRecord.timestamp, to: Date())
+        let years  = comps.year  ?? 0
+        let months = comps.month ?? 0
+        let days   = comps.day   ?? 0
+        let hours  = comps.hour  ?? 0
+        let mins   = comps.minute ?? 0
+        if totalDays >= 365 {
+            return months > 0 ? "\(years)年\(months)月" : "\(years)年"
+        } else if totalDays >= 30 {
+            return days > 0 ? "\(months)月\(days)天" : "\(months)月"
+        } else if totalHours >= 24 {
+            return hours > 0 ? "\(totalDays)天\(hours)h" : "\(totalDays)天"
+        } else if totalHours > 0 {
+            return "\(totalHours)h \(mins)m"
+        } else {
+            return "\(mins)m"
+        }
     }
 
     private var lastRecordTimeString: String {
