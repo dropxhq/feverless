@@ -140,10 +140,15 @@ struct RecordView: View {
     @ViewBuilder
     private var temperatureSection: some View {
         VStack(spacing: 16) {
-            Toggle(isOn: $includeTemp.animation(.easeInOut(duration: 0.2))) {
+            HStack {
                 Text("体温")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.secondary)
+                Spacer()
+                Toggle("", isOn: $includeTemp.animation(.easeInOut(duration: 0.2)))
+                    .labelsHidden()
+                    .scaleEffect(0.75, anchor: .trailing)
+                    .frame(width: 42)
             }
             .padding(.horizontal)
 
