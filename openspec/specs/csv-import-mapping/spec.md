@@ -1,119 +1,79 @@
 ## ADDED Requirements
 
 ### Requirement: 列名映射配置界面
-导入时若 CSV 文件存在无法自动识别的列名，系统 SHALL 在解析后自动弹出
-`ColumnMappingSheet`，展示 CSV 中所有列名，并允许用户为每列选择以下映射类型之一：
+导入时若 CSV 文件存在无法自动识别的列名，系统 SHALL 自动弹出 `ColumnMappingSheet`，展示 CSV 中所有列名，并允许用户为每列选择映射类型：
 
-- **简单映射**：将该列的值写入指定内部字段
-- **复合映射**：将该列的数值写入指定内部字段，并可附加若干固定字段值（如"液温"
-  列 → 数值 + 固定测量方式=腋下）；当主字段选择"数值"时，系统 SHALL 自动展开附
-  加字段区域
-- **关键词提取**：将该列文本写入备注，并可勾选"同时从本列提取药物关键词"
+- **体温列**：将该列的数值作为某个测量位置的温度值写入 DataRecord.temperatures；用户选择测量位置（从 TemperaturePositionCatalog 选取，或新建）
+- **药品列**：列中的值经关键词匹配后写入 DataRecord.medications
+- **关键词提取**：将该列文本写入 notes，并可勾选"同时从本列提取药物关键词"
+- **备注**：写入 DataRecord.notes
+- **时间**：写入 DataRecord.timestamp
 - **忽略**：不导入该列
 
-必要字段（`记录类型`、`时间`）未完成映射时，"继续"按钮 SHALL 保持禁用状态。
+列名映射对体温位置的解析 SHALL 查询 `TemperaturePositionCatalog`（关键词 + canonicalName），而非固定 `MeasurementMethod` 枚举。
 
-#### Scenario: 自动弹出列名映射界面
-- **WHEN** CSV 文件存在至少一个无法自动识别的列名
-- **THEN** 解析完成后自动弹出 ColumnMappingSheet，展示所有 CSV 列名及当前识别
-  状态（已识别/未识别）
+必要字段（`时间`）未完成映射时，"继续"按钮 SHALL 保持禁用。
 
-#### Scenario: 复合映射展开附加字段
-- **WHEN** 用户将某列的主字段设为"数值"
-- **THEN** 界面自动展开"同时固定以下字段"区域，可添加测量方式、记录类型等固定值
+#### Scenario: 体温列映射到自定义位置
+- **WHEN** 用户将"左腋温度"列映射为体温列，并选择"左侧液温"位置（用户自建）
+- **THEN** 该列数值写入 DataRecord.temperatures，positionRaw="左侧液温"
 
 #### Scenario: 必要字段未映射时禁止继续
-- **WHEN** "记录类型"或"时间"列尚未完成映射
-- **THEN** ColumnMappingSheet 底部"继续"按钮保持禁用，并提示哪些必要字段缺失
+- **WHEN** "时间"列尚未完成映射
+- **THEN** ColumnMappingSheet 底部"继续"按钮保持禁用
 
-#### Scenario: 关键词提取复选框
-- **WHEN** 用户为某列选择"关键词提取"类型并勾选"提取药物关键词"
-- **THEN** 解析阶段对该列文本执行关键词匹配，命中的药物创建对应用药记录
+#### Scenario: 同一行多个体温列
+- **WHEN** CSV 包含"腋温"列和"额温"列，均映射为体温列
+- **THEN** 同一行产生一个 DataRecord，temperatures 包含两个 TemperatureReading
+
+---
 
 ---
 
 ### Requirement: 列值别名映射配置界面
-列名映射完成后，系统 SHALL 扫描所有具有枚举意义的列（记录类型、测量方式、药物类
-型）中的唯一值，若存在无法自动识别的值（既非 rawValue 也非 displayName 也非已保
-存别名），则弹出 `ValueMappingSheet`，集中展示所有未识别值及其出现次数，允许用户
-为每个值选择对应的内部枚举值或选择"忽略（记为默认值）"。
+列名映射完成后，系统 SHALL 扫描体温位置列中的唯一值，若存在无法自动识别的值（既非 canonicalName 也非 keywords 也非已保存别名），则弹出 `ValueMappingSheet`，展示所有未识别值及出现次数，允许用户为每个值选择对应的 TemperaturePositionCatalog 条目或忽略。
 
-**此外，只要任意列启用了关键词提取（`extractsMedications == true`），无论枚举冲突
-是否存在，系统 SHALL 同样弹出 `ValueMappingSheet`，并在其中展示关键词配置区块。**
+若任意列启用了关键词提取（`extractsMedications == true`），系统 SHALL 在 `ValueMappingSheet` 中展示药品关键词配置区块，区块内嵌"管理药品"按钮，点击后以 `.sheet` 方式弹出 `MedicationCatalogView`。
 
-`ValueMappingSheet` 的关键词配置区块 SHALL 由独立的 `hasKeywordColumns: Bool` 参数
-控制，不再依赖 `medication_type` 分组是否存在。
+若列名映射中存在体温位置相关的未识别值，系统 SHALL 在 `ValueMappingSheet` 中展示体温位置配置区块，区块内嵌"管理体温位置"按钮，点击后以 `.sheet` 方式弹出 `TemperaturePositionCatalogView`。
 
-#### Scenario: 自动弹出值映射界面（枚举冲突）
-- **WHEN** 枚举列中存在未识别的值（如"美林"在药物类型列）
-- **THEN** ColumnMappingSheet 完成后自动弹出 ValueMappingSheet，按列分组展示所
-  有未识别值及出现次数
+#### Scenario: 未识别体温位置值触发值映射
+- **WHEN** 体温列中存在值"左耳"，不在 TemperaturePositionCatalog 中
+- **THEN** ValueMappingSheet 展示"左耳（×N）"，让用户选择映射到已有位置或忽略
 
-#### Scenario: 自动弹出值映射界面（关键词提取）
-- **WHEN** 没有枚举冲突，但用户为某列启用了关键词提取
-- **THEN** ColumnMappingSheet 完成后自动弹出 ValueMappingSheet，界面中显示关键词配置区块
+#### Scenario: 点击"管理体温位置"弹出 CatalogView
+- **WHEN** 用户在 ValueMappingSheet 点击"管理体温位置"
+- **THEN** 以 sheet 方式展示 TemperaturePositionCatalogView，用户可在其中新建"左耳"位置后返回
 
-#### Scenario: 展示出现次数
-- **WHEN** ValueMappingSheet 展示未识别值"美林"
-- **THEN** 界面显示"美林（×3）"，帮助用户判断该值的重要性
+#### Scenario: 点击"管理药品"弹出 CatalogView
+- **WHEN** 用户在 ValueMappingSheet 点击"管理药品"
+- **THEN** 以 sheet 方式展示 MedicationCatalogView，用户可新建药品后返回
 
-#### Scenario: 忽略未识别值
-- **WHEN** 用户对某个未识别值选择"忽略（记为默认值）"
-- **THEN** 该值对应的行按字段默认值处理（药物类型 → 其他，测量方式 → 腋下）
-
-#### Scenario: 关键词配置区块独立展示
-- **WHEN** ValueMappingSheet 以 hasKeywordColumns=true 展示，但 valueGroups 中无 medication_type 分组
-- **THEN** 关键词配置区块仍可见，用户可添加自定义关键词
+---
 
 ---
 
 ### Requirement: 关键词词典与匹配规则
-系统 SHALL 从 `MedicationCatalog` 读取所有药品定义的 keywords 列表（含 canonicalName 本身）作为关键词词典，不再使用硬编码内置词典。关键词匹配 SHALL 使用子字符串包含（`contains`）方式，并按词长降序匹配（长词优先），每个命中关键词创建一条用药记录，`typeRaw` 存储该关键词对应药品的 `canonicalName`。
-
-#### Scenario: 内置关键词自动命中
-- **WHEN** 备注列文本包含"美林"
-- **THEN** 系统自动创建一条 typeRaw=`"布洛芬"` 的用药记录，时间戳同所在行
-
-#### Scenario: 用户自建药品关键词命中
-- **WHEN** 用户为"退热贴"配置了关键词"退热"，备注列文本包含"退热"
-- **THEN** 系统自动创建一条 typeRaw=`"退热贴"` 的用药记录
+系统 SHALL 从 `MedicationCatalog` 读取所有药品定义的 keywords 列表（含 canonicalName 本身）作为关键词词典。关键词匹配 SHALL 使用子字符串包含（`contains`）方式，按词长降序匹配（长词优先），每个命中关键词创建一个 `MedicationUsage` 写入同一 DataRecord。
 
 #### Scenario: 同行命中多个关键词
 - **WHEN** 备注列文本包含"布洛芬和泰诺"
-- **THEN** 系统创建两条用药记录（typeRaw=`"布洛芬"` + typeRaw=`"对乙酰氨基酚"`），时间戳相同
+- **THEN** DataRecord.medications 包含两个 MedicationUsage（"布洛芬" + "对乙酰氨基酚"）
 
-#### Scenario: 无关键词命中
-- **WHEN** 备注列文本不包含任何已知关键词
-- **THEN** 不创建用药记录，文本仅写入体温记录的备注字段
+---
 
 ---
 
 ### Requirement: 值映射界面关键词区块（Tag UI）
-`ValueMappingSheet` 的关键词配置区块 SHALL 重构为支持 tag-based 药品管理的 UI，分为左侧药品名（canonical key）和右侧关键词列表（values）两部分，均可无限拓展。
+`ValueMappingSheet` 的药品关键词配置区块通过弹出 `MedicationCatalogView`（sheet 模式）实现，不再在 ValueMappingSheet 内嵌独立的 Tag UI。`TemperaturePositionCatalogView` 同理。
 
-- 左侧展示 `MedicationCatalog.all` 中的所有药品，选中后右侧显示该药品的 keywords 列表
-- 右侧每个关键词可独立删除；底部有"添加关键词"输入框
-- 用户可新增自定义药品（输入 canonicalName）
-- 内置药品不可删除，但可编辑其 keywords
-- 添加关键词后，列表 SHALL 立即显示新关键词（修复现有渲染 bug）
+两个 CatalogView 关闭时 SHALL 将修改后的 catalog 状态自动持久化。
 
-`ValueMappingSheet` 关闭时 SHALL 将修改后的 catalog 状态同步持久化。
+#### Scenario: CatalogView 修改在导入流程中立即生效
+- **WHEN** 用户在 ValueMappingSheet 弹出的 MedicationCatalogView 中新增关键词"布洛芬悬液"后关闭
+- **THEN** 返回 ValueMappingSheet 后，关键词匹配立即使用新关键词
 
-#### Scenario: 添加关键词立即显示
-- **WHEN** 用户在关键词输入框输入"布洛芬悬液"并点击"添加"
-- **THEN** 关键词列表立即出现"布洛芬悬液"，无需关闭重开
-
-#### Scenario: 选择不同药品切换关键词列表
-- **WHEN** 用户从左侧选择"对乙酰氨基酚"
-- **THEN** 右侧关键词列表更新为该药品的 keywords
-
-#### Scenario: 新增自建药品
-- **WHEN** 用户输入新药品名"退热贴"并确认
-- **THEN** 左侧列表末尾出现"退热贴"，右侧初始关键词列表为空
-
-#### Scenario: 删除关键词
-- **WHEN** 用户点击"美林"旁的删除按钮
-- **THEN** "美林"从关键词列表中移除，catalog 持久化更新
+---
 
 ---
 
@@ -179,3 +139,10 @@
 #### Scenario: 两个体温列同行均有值
 - **WHEN** 某行"液温"=38.5，"额温"=37.8 均有数值
 - **THEN** 生成两条体温记录（腋下 38.5 和 额温 37.8），时间戳相同
+
+### Requirement: 重复/空列名配置不覆盖（保持不变）
+当 CSV 文件中存在多列共享相同列名（包括空列名 `""`）时，系统 SHALL 保证用户在 `ColumnMappingSheet` 中对其中一列配置的有意义规则不被同名其他列的"忽略"规则覆盖。
+
+#### Scenario: 空列名多列只保留有效规则
+- **WHEN** CSV 有两列列名均为空，用户将其中一列配置为"备注+关键词提取"，另一列默认"忽略"
+- **THEN** 最终配置中该列名对应规则为关键词提取，不被忽略覆盖

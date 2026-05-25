@@ -1,23 +1,25 @@
 ## ADDED Requirements
 
 ### Requirement: 体温趋势折线图
-图表页 SHALL 使用 Swift Charts 渲染当前发烧周期内的体温折线图，X 轴为时间，Y 轴为温度（范围自动适配，含正常体温参考线 37.0°C）。
+图表页 SHALL 使用 Swift Charts 渲染当前发烧周期内的体温折线图。数据源改为查询 `DataRecord`，遍历 `DataRecord.temperatures` 展开 `TemperatureReading` 作为图表点；Y 轴参考线（37.0°C）和发烧阈值线通过 `TemperaturePositionCatalog` 动态获取（默认腋下阈值 37.5°C）。
 
 #### Scenario: 展示折线图
-- **WHEN** 存在当前发烧周期的体温记录
-- **THEN** 折线图展示各记录点，Y 轴包含 36–40°C 范围
+- **WHEN** 存在当前发烧周期的 DataRecord 含 TemperatureReading
+- **THEN** 折线图展示各读数点，Y 轴包含 36–40°C 范围
 
 #### Scenario: 无数据时
-- **WHEN** 无任何体温记录
+- **WHEN** 无任何 DataRecord 或所有 DataRecord.temperatures 均为空
 - **THEN** 展示空状态占位图
 
+---
 ### Requirement: 用药标记
-图表页 SHALL 在折线图上用 `RuleMark`（竖线）标注每次用药时间，布洛芬用黄色、对乙酰氨基酚用蓝色。
+图表页 SHALL 在折线图上用 `RuleMark`（竖线）标注每次用药时间。数据源改为遍历 `DataRecord.medications`，取父 `DataRecord.timestamp` 作为标注时间；颜色通过 `MedicationCatalog.shared.findByCanonicalName()` 查找（布洛芬黄色、对乙酰氨基酚蓝色，其他灰色）。
 
 #### Scenario: 用药时间标注
-- **WHEN** 存在用药记录
-- **THEN** 对应时间点出现带颜色的竖线标注
+- **WHEN** DataRecord.medications 包含布洛芬 MedicationUsage
+- **THEN** 对应 timestamp 出现黄色竖线标注
 
+---
 ### Requirement: 时间范围筛选
 图表页 SHALL 提供"今天 / 昨天 / 7天"三档时间范围筛选，默认"今天"。
 
@@ -26,40 +28,8 @@
 - **THEN** 图表 X 轴扩展为最近 7 天，展示全部记录
 
 ### Requirement: 记录明细列表
-图表页 SHALL 在图表下方展示当前时间范围内所有 DataRecord，每条 DataRecord 显示为一行（同时含体温和用药者合并为单行），按时间倒序排列。列表支持 swipe 删除、点击编辑（弹出编辑 Sheet）、长按进入多选批量删除、按日期分组全选、全选当前时间范围内可见记录。切换时间范围时退出多选模式并清空选中状态。
+图表页 SHALL 在图表下方展示当前时间范围内的所有 DataRecord，按 timestamp 倒序排列。每个 DataRecord 可展开显示其所有 TemperatureReading 和 MedicationUsage。测量方式显示 `TemperatureReading.positionRaw`（即 canonicalName，如"腋下"）。
 
-#### Scenario: 展示记录明细（纯体温）
-- **WHEN** DataRecord 仅含 TemperatureReading
-- **THEN** 列表行显示温度计图标、°C 值、测量位置、格式化时间、发烧状态标签
-
-#### Scenario: 展示记录明细（纯用药）
-- **WHEN** DataRecord 仅含 MedicationUsage
-- **THEN** 列表行显示药丸图标、药品名、格式化时间
-
-#### Scenario: 展示记录明细（合并行）
-- **WHEN** DataRecord 同时含体温和用药
-- **THEN** 列表行合并展示体温信息和用药信息，时间戳显示一次
-
-#### Scenario: swipe 删除
-- **WHEN** 用户在某行向左 swipe 并确认删除
-- **THEN** 对应 DataRecord 被删除，列表和图表刷新
-
-#### Scenario: 点击编辑
-- **WHEN** 非多选模式下用户点击某行
-- **THEN** 弹出编辑 Sheet，预填该 DataRecord 当前数据
-
-#### Scenario: 长按进入多选
-- **WHEN** 用户长按某行
-- **THEN** 进入多选模式，该行自动选中，底部出现删除操作栏
-
-#### Scenario: 按日期分组全选
-- **WHEN** 多选模式下用户点击某日期分组 header 中的"全选本组"按钮
-- **THEN** 该日期分组内所有可见行均进入选中状态
-
-#### Scenario: 全选当前范围可见记录
-- **WHEN** 多选模式下用户点击全局"全选"
-- **THEN** 当前时间范围内所有可见 DataRecord 均选中
-
-#### Scenario: 切换时间范围清空选中
-- **WHEN** 多选模式下用户切换时间范围
-- **THEN** 退出多选模式，选中集合清空
+#### Scenario: 展示含多体温的记录
+- **WHEN** DataRecord 包含两个 TemperatureReading
+- **THEN** 记录行展示"腋下 38.0°C · 额温 37.8°C · 10:30"

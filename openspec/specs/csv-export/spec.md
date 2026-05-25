@@ -12,38 +12,37 @@
 - **THEN** 预览数量随日期调整实时更新
 
 ### Requirement: CSV 文件生成与分发
-系统 SHALL 将当前选中孩子在所选时间范围内的所有体温记录和用药记录导出为单一 CSV
-文件，文件名格式为 `feverless_<孩子名>_<开始日期>_<结束日期>.csv`（全部数据时日期
-范围取实际最早和最晚记录日期）。生成后 SHALL 通过系统 ShareSheet 呈现，支持保存
-到文件 App、AirDrop 及其他共享方式。
+系统 SHALL 将当前选中孩子在所选时间范围内的所有 `DataRecord` 导出为单一 CSV 文件。
 
-**CSV 格式规范（更新）**：
-- 第一行为表头：`时间,记录类型,数值,测量方式,药物类型,同步体温,备注`
-- 时间列排列在首位
-- `记录类型` 值使用中文显示名：`体温` 或 `用药`
-- `时间` 使用 ISO 8601 含时区格式（`yyyy-MM-dd'T'HH:mm:ssXXXXX`），不变
-- `测量方式` 值使用中文显示名：`腋下`、`耳温`、`肛温`、`口腔`、`额温`
-- `药物类型` 值使用中文显示名：`布洛芬`、`对乙酰氨基酚`、`其他`
-- 不适用字段留空
-- 含逗号、双引号或换行的字段值须用双引号包裹（RFC 4180）
-- 文件编码为 UTF-8
+每个 DataRecord 可能产生多行 CSV 输出：
+- 每个 `TemperatureReading` 产生一行，`记录类型=体温`，`数值=value`，`测量方式=positionRaw`
+- 每个 `MedicationUsage` 产生一行，`记录类型=用药`，`药物类型=medicationNameRaw`
+- 若 DataRecord 包含体温和用药，用药行的`同步体温`列填写同一 DataRecord 中第一个 TemperatureReading 的 value
+- `备注` 列只写入第一行（避免重复），或写入每行（实现可选，保持一致即可）
+- 时间列均使用父 DataRecord.timestamp
 
-#### Scenario: 成功生成并分享 CSV（中文格式）
-- **WHEN** 用户点击导出 Sheet 中的"导出 CSV"按钮
-- **THEN** 系统弹出 ShareSheet，CSV 第一行为
-  `时间,记录类型,数值,测量方式,药物类型,同步体温,备注`，时间列在首位，枚举值使
-  用中文显示名
+**CSV 格式**（表头和字段同原规范）：
+`时间,记录类型,数值,测量方式,药物类型,同步体温,备注`
 
-#### Scenario: 体温记录导出格式
-- **WHEN** 导出包含一条腋下测量 38.5°C 的体温记录
-- **THEN** 对应行格式为
-  `2026-05-22T10:00:00+08:00,体温,38.5,腋下,,,备注内容`
+测量方式值 SHALL 使用 `TemperatureReading.positionRaw`（即 canonicalName，如"腋下"、"左侧液温"）。药物类型值 SHALL 使用 `MedicationUsage.medicationNameRaw`（即 canonicalName）。
 
-#### Scenario: 用药记录导出格式
-- **WHEN** 导出包含一条布洛芬用药记录（同步体温 38.5）
-- **THEN** 对应行格式为
-  `2026-05-22T10:30:00+08:00,用药,,,布洛芬,38.5,`
+#### Scenario: 含多体温的 DataRecord 导出
+- **WHEN** DataRecord 包含腋下 38.0°C 和额温 37.8°C 两个 TemperatureReading
+- **THEN** CSV 输出两行，时间相同，分别为 `体温,38.0,腋下,,,...` 和 `体温,37.8,额温,,,...`
 
-#### Scenario: 无记录时导出
-- **WHEN** 所选时间范围内无任何记录
-- **THEN** 导出按钮显示为禁用状态（灰色不可点击），并提示"所选时间范围内无记录"
+#### Scenario: 含体温和用药的 DataRecord 导出
+- **WHEN** DataRecord 包含腋下 38.0°C 和布洛芬
+- **THEN** CSV 输出体温行 `体温,38.0,腋下,,,` 和用药行 `用药,,,布洛芬,38.0,`（同步体温填 38.0）
+
+#### Scenario: 自建体温位置导出
+- **WHEN** TemperatureReading.positionRaw="左侧液温"
+- **THEN** CSV 该行测量方式列值为"左侧液温"
+
+---
+
+### Requirement: CSV 导出入口与时间范围选择（保持不变）
+系统 SHALL 在 ProfileView 数据管理区提供"导出数据"入口，点击后弹出导出配置 Sheet，用户可选择时间范围，Sheet 内实时展示将导出的记录数（改为"N 条 DataRecord，含 M 次体温、K 次用药"）。
+
+#### Scenario: 选择时间范围后看到预览数量
+- **WHEN** 用户选择"最近 30 天"
+- **THEN** Sheet 显示该范围内 DataRecord 总数及其中体温/用药统计

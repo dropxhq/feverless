@@ -5,10 +5,12 @@ import WidgetKit
 struct EditRecordSheet: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
-    @ObservedObject private var positionCatalog = TemperaturePositionCatalog.shared
     @ObservedObject private var catalog = MedicationCatalog.shared
+    @ObservedObject private var positionCatalog = TemperaturePositionCatalog.shared
 
     let record: DataRecord
+
+    @State private var selectedTab: RecordTab
 
     // Temperature state
     @State private var tempInteger: Int
@@ -17,8 +19,13 @@ struct EditRecordSheet: View {
     @State private var isPressing: Bool = false
     @State private var pressStepCount: Int = 0
 
-    // Medication state
+    // Concurrent medication (used in 体温 tab): nil = 无
+    @State private var concurrentMedName: String?
+
+    // Medication state (used in 用药 tab)
     @State private var selectedMedName: String
+    // Concurrent temperature (used in 用药 tab)
+    @State private var concurrentTempEnabled: Bool
 
     // Shared
     @State private var recordTime: Date
@@ -26,12 +33,19 @@ struct EditRecordSheet: View {
 
     init(record: DataRecord) {
         self.record = record
+        // Start on temperature tab if record has temperature, else medication
+        _selectedTab = State(initialValue: record.temperatures.isEmpty ? .medication : .temperature)
+
         let temp = record.temperatures.first
         let rawValue = temp?.value ?? 37.5
         _tempInteger = State(initialValue: Int(rawValue))
         _tempDecimal = State(initialValue: Int(round((rawValue - Double(Int(rawValue))) * 10)))
         _selectedPositionName = State(initialValue: temp?.positionRaw ?? TemperaturePositionCatalog.shared.all.first?.canonicalName ?? "腋下")
+
+        _concurrentMedName = State(initialValue: record.medications.first?.medicationNameRaw)
         _selectedMedName = State(initialValue: record.medications.first?.medicationNameRaw ?? MedicationCatalog.shared.all.first?.canonicalName ?? "布洛芬")
+        _concurrentTempEnabled = State(initialValue: !record.temperatures.isEmpty)
+
         _recordTime = State(initialValue: record.timestamp)
         _notes = State(initialValue: record.notes)
     }
@@ -52,28 +66,21 @@ struct EditRecordSheet: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 20) {
-                    if !record.temperatures.isEmpty {
-                        temperatureSection
-                    }
-                    if !record.medications.isEmpty {
-                        medicationSection
-                    }
-                    timeSection
-                    notesSection
-
-                    Button("保存") { save() }
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 15)
-                        .background(Color.blue, in: RoundedRectangle(cornerRadius: 14))
-                        .buttonStyle(.plain)
-                        .padding(.horizontal)
-                        .padding(.top, 4)
+            VStack(spacing: 0) {
+                Picker("记录类型", selection: $selectedTab) {
+                    Text("体温").tag(RecordTab.temperature)
+                    Text("用药").tag(RecordTab.medication)
                 }
-                .padding(.bottom, 32)
+                .pickerStyle(.segmented)
+                .padding()
+
+                ScrollView {
+                    if selectedTab == .temperature {
+                        temperatureTab
+                    } else {
+                        medicationTab
+                    }
+                }
             }
             .navigationTitle("编辑记录")
             .navigationBarTitleDisplayMode(.inline)
@@ -85,11 +92,12 @@ struct EditRecordSheet: View {
         }
     }
 
-    // MARK: Temperature Section
+    // MARK: - Temperature Tab
 
     @ViewBuilder
-    private var temperatureSection: some View {
+    private var temperatureTab: some View {
         VStack(spacing: 20) {
+            // Temperature ring
             ZStack {
                 Circle()
                     .stroke(Color.gray.opacity(0.1), lineWidth: 8)
@@ -115,11 +123,15 @@ struct EditRecordSheet: View {
                     Text("°C")
                         .font(.title3)
                         .foregroundStyle(.secondary)
+                    Text("点击 ±0.1 微调")
+                        .font(.caption2)
+                        .foregroundStyle(.quaternary)
                 }
             }
             .frame(width: 180, height: 180)
             .padding(.top, 8)
 
+            // Stepper
             HStack(spacing: 20) {
                 Text("−")
                     .font(.title)
@@ -133,11 +145,9 @@ struct EditRecordSheet: View {
                             .onChanged { _ in if !isPressing { isPressing = true; startRepeating(delta: -0.1) } }
                             .onEnded { _ in stopRepeating() }
                     )
-
                 Text("0.1°C 微调")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-
                 Text("+")
                     .font(.title)
                     .frame(width: 44, height: 44)
@@ -154,6 +164,7 @@ struct EditRecordSheet: View {
 
             Divider().padding(.horizontal)
 
+            // Measurement position
             VStack(alignment: .leading, spacing: 8) {
                 Text("测量方式")
                     .font(.system(size: 12, weight: .semibold))
@@ -186,45 +197,187 @@ struct EditRecordSheet: View {
                     .padding(.horizontal)
                 }
             }
-        }
-    }
 
-    // MARK: Medication Section
-
-    @ViewBuilder
-    private var medicationSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("药物类型")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal)
-
-            ForEach(catalog.all) { def in
-                Button {
-                    selectedMedName = def.canonicalName
-                } label: {
-                    HStack {
-                        Text(catalog.emoji(for: def.canonicalName) + " " + def.canonicalName)
-                            .font(.system(size: 13, weight: .medium))
-                        Spacer()
-                        if selectedMedName == def.canonicalName {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(.blue)
+            // Concurrent medication (with "无" to remove)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("同时记录用药")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        medChip(label: "无", isSelected: concurrentMedName == nil) {
+                            concurrentMedName = nil
+                        }
+                        ForEach(catalog.all) { def in
+                            medChip(
+                                label: catalog.emoji(for: def.canonicalName) + " " + def.canonicalName,
+                                isSelected: concurrentMedName == def.canonicalName
+                            ) {
+                                concurrentMedName = def.canonicalName
+                            }
                         }
                     }
-                    .padding()
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(selectedMedName == def.canonicalName ? Color.blue.opacity(0.1) : Color.gray.opacity(0.08))
-                    )
+                    .padding(.horizontal)
                 }
-                .foregroundStyle(.primary)
-                .padding(.horizontal)
             }
+
+            timeSection
+            notesSection
+            saveButton
         }
+        .padding(.bottom, 32)
     }
 
-    // MARK: Shared Sections
+    // MARK: - Medication Tab
+
+    @ViewBuilder
+    private var medicationTab: some View {
+        VStack(spacing: 20) {
+            // Drug type list
+            VStack(alignment: .leading, spacing: 8) {
+                Text("药物类型")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal)
+                ForEach(catalog.all) { def in
+                    Button {
+                        selectedMedName = def.canonicalName
+                    } label: {
+                        HStack {
+                            Text(catalog.emoji(for: def.canonicalName) + " " + def.canonicalName)
+                                .font(.system(size: 13, weight: .medium))
+                            Spacer()
+                            if selectedMedName == def.canonicalName {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(.blue)
+                            }
+                        }
+                        .padding()
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(selectedMedName == def.canonicalName ? Color.blue.opacity(0.1) : Color.gray.opacity(0.08))
+                        )
+                    }
+                    .foregroundStyle(.primary)
+                    .padding(.horizontal)
+                }
+            }
+
+            // Concurrent temperature (with "无" to remove)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("同时记录体温")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        medChip(label: "无", isSelected: !concurrentTempEnabled) {
+                            concurrentTempEnabled = false
+                        }
+                        medChip(
+                            label: String(format: "%.1f°C %@", currentTemp, selectedPositionName),
+                            isSelected: concurrentTempEnabled
+                        ) {
+                            concurrentTempEnabled = true
+                        }
+                    }
+                    .padding(.horizontal)
+                }
+
+                // Inline temp editor when enabled
+                if concurrentTempEnabled {
+                    VStack(spacing: 12) {
+                        HStack(spacing: 20) {
+                            Text("−")
+                                .font(.title2)
+                                .frame(width: 40, height: 40)
+                                .background(Color.gray.opacity(currentTemp <= 35.0 ? 0.08 : 0.12), in: RoundedRectangle(cornerRadius: 12))
+                                .foregroundStyle(currentTemp <= 35.0 ? Color.secondary : Color.blue)
+                                .opacity(currentTemp <= 35.0 ? 0.5 : 1.0)
+                                .contentShape(RoundedRectangle(cornerRadius: 12))
+                                .gesture(
+                                    DragGesture(minimumDistance: 0)
+                                        .onChanged { _ in if !isPressing { isPressing = true; startRepeating(delta: -0.1) } }
+                                        .onEnded { _ in stopRepeating() }
+                                )
+                            Text(String(format: "%.1f°C", currentTemp))
+                                .font(.system(size: 20, weight: .light))
+                                .foregroundStyle(isTempFever ? Color.red : Color.primary)
+                                .monospacedDigit()
+                                .frame(minWidth: 72)
+                            Text("+")
+                                .font(.title2)
+                                .frame(width: 40, height: 40)
+                                .background(Color.gray.opacity(currentTemp >= 42.9 ? 0.08 : 0.12), in: RoundedRectangle(cornerRadius: 12))
+                                .foregroundStyle(currentTemp >= 42.9 ? Color.secondary : Color.blue)
+                                .opacity(currentTemp >= 42.9 ? 0.5 : 1.0)
+                                .contentShape(RoundedRectangle(cornerRadius: 12))
+                                .gesture(
+                                    DragGesture(minimumDistance: 0)
+                                        .onChanged { _ in if !isPressing { isPressing = true; startRepeating(delta: 0.1) } }
+                                        .onEnded { _ in stopRepeating() }
+                                )
+                        }
+                        .padding(.horizontal)
+
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach(positionCatalog.all, id: \.canonicalName) { pos in
+                                    Button(pos.canonicalName) {
+                                        selectedPositionName = pos.canonicalName
+                                    }
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundStyle(selectedPositionName == pos.canonicalName ? Color.blue : Color.primary.opacity(0.7))
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 8)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 20)
+                                            .fill(selectedPositionName == pos.canonicalName ? Color.blue.opacity(0.08) : Color.gray.opacity(0.1))
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 20)
+                                                    .strokeBorder(
+                                                        selectedPositionName == pos.canonicalName ? Color.blue.opacity(0.3) : Color.clear,
+                                                        lineWidth: 1.5
+                                                    )
+                                            )
+                                    )
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                            .padding(.horizontal)
+                        }
+                    }
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                    .animation(.easeInOut(duration: 0.2), value: concurrentTempEnabled)
+                }
+            }
+
+            timeSection
+            notesSection
+            saveButton
+        }
+        .padding(.bottom, 32)
+    }
+
+    // MARK: - Shared Components
+
+    private func medChip(label: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
+        Button(label, action: action)
+            .font(.system(size: 13, weight: .medium))
+            .foregroundStyle(isSelected ? Color.blue : Color.primary.opacity(0.7))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(isSelected ? Color.blue.opacity(0.08) : Color.gray.opacity(0.1))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20)
+                            .strokeBorder(isSelected ? Color.blue.opacity(0.3) : Color.clear, lineWidth: 1.5)
+                    )
+            )
+            .buttonStyle(.plain)
+    }
 
     @ViewBuilder
     private var timeSection: some View {
@@ -235,7 +388,6 @@ struct EditRecordSheet: View {
             DatePicker(
                 "记录时间",
                 selection: $recordTime,
-                in: ...Date(),
                 displayedComponents: [.date, .hourAndMinute]
             )
             .datePickerStyle(.compact)
@@ -261,7 +413,20 @@ struct EditRecordSheet: View {
         .padding(.horizontal)
     }
 
-    // MARK: Actions
+    @ViewBuilder
+    private var saveButton: some View {
+        Button("保存") { save() }
+            .font(.system(size: 16, weight: .semibold))
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 15)
+            .background(Color.blue, in: RoundedRectangle(cornerRadius: 14))
+            .buttonStyle(.plain)
+            .padding(.horizontal)
+            .padding(.top, 4)
+    }
+
+    // MARK: - Actions
 
     private func adjustTemp(by delta: Double) {
         let raw = currentTemp + delta
@@ -294,13 +459,49 @@ struct EditRecordSheet: View {
     private func save() {
         record.timestamp = recordTime
         record.notes = notes
-        if let temp = record.temperatures.first {
-            temp.value = currentTemp
-            temp.positionRaw = selectedPositionName
+
+        switch selectedTab {
+        case .temperature:
+            // Update or create temperature reading
+            if let temp = record.temperatures.first {
+                temp.value = currentTemp
+                temp.positionRaw = selectedPositionName
+            } else {
+                record.temperatures.append(TemperatureReading(positionRaw: selectedPositionName, value: currentTemp))
+            }
+            // Update or remove concurrent medication
+            if let medName = concurrentMedName {
+                if let med = record.medications.first {
+                    med.medicationNameRaw = medName
+                } else {
+                    record.medications.append(MedicationUsage(medicationNameRaw: medName))
+                }
+            } else {
+                for med in record.medications { modelContext.delete(med) }
+                record.medications.removeAll()
+            }
+
+        case .medication:
+            // Update or create medication usage
+            if let med = record.medications.first {
+                med.medicationNameRaw = selectedMedName
+            } else {
+                record.medications.append(MedicationUsage(medicationNameRaw: selectedMedName))
+            }
+            // Update or remove concurrent temperature
+            if concurrentTempEnabled {
+                if let temp = record.temperatures.first {
+                    temp.value = currentTemp
+                    temp.positionRaw = selectedPositionName
+                } else {
+                    record.temperatures.append(TemperatureReading(positionRaw: selectedPositionName, value: currentTemp))
+                }
+            } else {
+                for temp in record.temperatures { modelContext.delete(temp) }
+                record.temperatures.removeAll()
+            }
         }
-        if let med = record.medications.first {
-            med.medicationNameRaw = selectedMedName
-        }
+
         try? modelContext.save()
         WidgetCenter.shared.reloadAllTimelines()
         dismiss()
