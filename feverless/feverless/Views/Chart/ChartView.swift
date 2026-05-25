@@ -838,7 +838,10 @@ struct ChartView: View {
             .background(isSelected ? Color.blue.opacity(0.06) : Color.clear)
             .contentShape(Rectangle())
             .onTapGesture {
-                openSwipeRowId = nil
+                if openSwipeRowId != nil {
+                    openSwipeRowId = nil
+                    return
+                }
                 if isSelecting {
                     if isSelected { selectedIds.remove(record.id) } else { selectedIds.insert(record.id) }
                     if selectedIds.isEmpty { isSelecting = false }
