@@ -62,7 +62,7 @@ struct ContentView: View {
             }
             // Sheet for RecordView — also opened via deep link
             .sheet(item: $recordRequest) { request in
-                RecordView(child: request.child, initialTab: request.tab)
+                RecordView(mode: .create(child: request.child, initialTab: request.tab))
             }
             // Deep link: feverless://record?type=temperature | medication
             .onOpenURL { url in

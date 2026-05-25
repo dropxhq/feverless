@@ -114,7 +114,7 @@ struct HomeView: View {
             }
         }
         .sheet(item: $editingRecord) { record in
-            EditRecordSheet(record: record)
+            RecordView(mode: .edit(record: record))
         }
         .confirmationDialog(
             recordPendingDelete.map { $0.temperatures.isEmpty || $0.medications.isEmpty ? "" : "将同时删除关联的体温和用药记录" } ?? "",

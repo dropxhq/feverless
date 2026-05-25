@@ -8,31 +8,75 @@ import SwiftData
 import WidgetKit
 
 struct RecordView: View {
+
+    // MARK: - Mode
+
+    enum Mode {
+        case create(child: Child, initialTab: RecordTab)
+        case edit(record: DataRecord)
+    }
+
+    // MARK: - Environment
+
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Query(sort: \DataRecord.timestamp, order: .reverse) private var allRecords: [DataRecord]
     @ObservedObject private var catalog = MedicationCatalog.shared
     @ObservedObject private var positionCatalog = TemperaturePositionCatalog.shared
 
-    let child: Child
-    let initialTab: RecordTab
+    // MARK: - Properties
+
+    let mode: Mode
 
     @State private var includeTemp: Bool
-    @State private var tempInteger: Int = 37
-    @State private var tempDecimal: Int = 5
-    @State private var selectedPositionName: String = ""
-    @State private var selectedMedName: String? = nil   // nil = 无
-    @State private var recordTime: Date = Date()
-    @State private var notes: String = ""
+    @State private var tempInteger: Int
+    @State private var tempDecimal: Int
+    @State private var selectedPositionName: String
+    @State private var selectedMedName: String?
+    @State private var recordTime: Date
+    @State private var notes: String
     @State private var isPressing: Bool = false
     @State private var pressStepCount: Int = 0
 
-    init(child: Child, initialTab: RecordTab) {
-        self.child = child
-        self.initialTab = initialTab
-        _includeTemp = State(initialValue: initialTab == .temperature)
-        if initialTab == .medication {
-            _selectedMedName = State(initialValue: MedicationCatalog.shared.all.first?.canonicalName)
+    // MARK: - Init
+
+    init(mode: Mode) {
+        self.mode = mode
+        switch mode {
+        case .create(_, let initialTab):
+            _includeTemp = State(initialValue: initialTab == .temperature)
+            _tempInteger = State(initialValue: 37)
+            _tempDecimal = State(initialValue: 5)
+            _selectedPositionName = State(initialValue: "")
+            _selectedMedName = State(initialValue: initialTab == .medication ? MedicationCatalog.shared.all.first?.canonicalName : nil)
+            _recordTime = State(initialValue: Date())
+            _notes = State(initialValue: "")
+        case .edit(let record):
+            _includeTemp = State(initialValue: !record.temperatures.isEmpty)
+            let temp = record.temperatures.first
+            let rawValue = temp?.value ?? 37.5
+            _tempInteger = State(initialValue: Int(rawValue))
+            _tempDecimal = State(initialValue: Int(round((rawValue - Double(Int(rawValue))) * 10)))
+            _selectedPositionName = State(initialValue: temp?.positionRaw ?? TemperaturePositionCatalog.shared.all.first?.canonicalName ?? "腋下")
+            _selectedMedName = State(initialValue: record.medications.first?.medicationNameRaw)
+            _recordTime = State(initialValue: record.timestamp)
+            _notes = State(initialValue: record.notes)
+        }
+    }
+
+    // MARK: - Computed
+
+    private var childId: UUID {
+        switch mode {
+        case .create(let child, _): return child.id
+        case .edit(let record): return record.childId
+        }
+    }
+
+    private var navigationTitle: String {
+        switch mode {
+        case .create: return "记录"
+        case .edit: return "编辑记录"
         }
     }
 
@@ -45,10 +89,6 @@ struct RecordView: View {
         return max(0, min(1, (currentTemp - minTemp) / (maxTemp - minTemp)))
     }
 
-    private var childRecords: [DataRecord] {
-        allRecords.filter { $0.childId == child.id }
-    }
-
     private var selectedPosition: TemperaturePositionDefinition? {
         positionCatalog.find(selectedPositionName) ?? positionCatalog.all.first
     }
@@ -57,6 +97,12 @@ struct RecordView: View {
         let threshold = selectedPosition?.feverThreshold ?? 37.5
         return currentTemp >= threshold
     }
+
+    private var childRecords: [DataRecord] {
+        allRecords.filter { $0.childId == childId }
+    }
+
+    // MARK: - Body
 
     var body: some View {
         NavigationStack {
@@ -71,7 +117,11 @@ struct RecordView: View {
                 }
                 .padding(.bottom, 32)
             }
-            .navigationTitle("记录")
+            .navigationTitle(navigationTitle)
+            .navigationBarTitleDisplayMode({
+                if case .edit = mode { return .inline }
+                return .automatic
+            }())
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("取消") { dismiss() }
@@ -90,7 +140,6 @@ struct RecordView: View {
     @ViewBuilder
     private var temperatureSection: some View {
         VStack(spacing: 16) {
-            // Section header with toggle switch
             Toggle(isOn: $includeTemp.animation(.easeInOut(duration: 0.2))) {
                 Text("体温")
                     .font(.system(size: 12, weight: .semibold))
@@ -99,7 +148,6 @@ struct RecordView: View {
             .padding(.horizontal)
 
             if includeTemp {
-                // Temperature ring
                 ZStack {
                     Circle()
                         .stroke(Color.gray.opacity(0.1), lineWidth: 8)
@@ -132,7 +180,6 @@ struct RecordView: View {
                 }
                 .frame(width: 180, height: 180)
 
-                // Stepper
                 HStack(spacing: 16) {
                     Text("−")
                         .font(.title3)
@@ -163,7 +210,6 @@ struct RecordView: View {
                         )
                 }
 
-                // Measurement position
                 VStack(alignment: .leading, spacing: 8) {
                     Text("测量方式")
                         .font(.system(size: 12, weight: .semibold))
@@ -228,12 +274,12 @@ struct RecordView: View {
                 .padding(.horizontal)
             }
 
-            // Safety hint for selected medication
-            if let medName = selectedMedName,
+            if case .create = mode,
+               let medName = selectedMedName,
                let def = catalog.all.first(where: { $0.canonicalName == medName }),
                def.hasReminder {
                 let avail = MedicationSafetyViewModel.availability(
-                    forMedicationName: medName, childId: child.id, records: childRecords
+                    forMedicationName: medName, childId: childId, records: childRecords
                 )
                 if case .cooldown = avail {
                     Label("仍在冷却期，请谨慎服用", systemImage: "exclamationmark.triangle.fill")
@@ -272,12 +318,22 @@ struct RecordView: View {
             Text("记录时间")
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.secondary)
-            DatePicker(
-                "记录时间",
-                selection: $recordTime,
-                in: ...Date(),
-                displayedComponents: [.date, .hourAndMinute]
-            )
+            Group {
+                if case .create = mode {
+                    DatePicker(
+                        "记录时间",
+                        selection: $recordTime,
+                        in: ...Date(),
+                        displayedComponents: [.date, .hourAndMinute]
+                    )
+                } else {
+                    DatePicker(
+                        "记录时间",
+                        selection: $recordTime,
+                        displayedComponents: [.date, .hourAndMinute]
+                    )
+                }
+            }
             .datePickerStyle(.compact)
             .labelsHidden()
             .font(.system(size: 13, weight: .medium))
@@ -303,7 +359,11 @@ struct RecordView: View {
 
     @ViewBuilder
     private var saveButton: some View {
-        Button("保存记录") { save() }
+        let label: String = {
+            if case .create = mode { return "保存记录" }
+            return "保存"
+        }()
+        Button(label) { save() }
             .font(.system(size: 16, weight: .semibold))
             .foregroundStyle(.white)
             .frame(maxWidth: .infinity)
@@ -350,25 +410,52 @@ struct RecordView: View {
 
     private func save() {
         guard includeTemp || selectedMedName != nil else { return }
-        let positionName = selectedPosition?.canonicalName ?? (positionCatalog.all.first?.canonicalName ?? "腋下")
+        switch mode {
+        case .create(let child, _):
+            let positionName = selectedPosition?.canonicalName ?? (positionCatalog.all.first?.canonicalName ?? "腋下")
+            var readings: [TemperatureReading] = []
+            if includeTemp {
+                readings = [TemperatureReading(positionRaw: positionName, value: currentTemp)]
+            }
+            var medications: [MedicationUsage] = []
+            if let medName = selectedMedName {
+                medications = [MedicationUsage(medicationNameRaw: medName)]
+            }
+            let record = DataRecord(
+                childId: child.id,
+                timestamp: recordTime,
+                notes: notes,
+                temperatures: readings,
+                medications: medications
+            )
+            modelContext.insert(record)
 
-        var readings: [TemperatureReading] = []
-        if includeTemp {
-            readings = [TemperatureReading(positionRaw: positionName, value: currentTemp)]
-        }
-        var medications: [MedicationUsage] = []
-        if let medName = selectedMedName {
-            medications = [MedicationUsage(medicationNameRaw: medName)]
+        case .edit(let record):
+            record.timestamp = recordTime
+            record.notes = notes
+            if includeTemp {
+                if let temp = record.temperatures.first {
+                    temp.value = currentTemp
+                    temp.positionRaw = selectedPositionName
+                } else {
+                    record.temperatures.append(TemperatureReading(positionRaw: selectedPositionName, value: currentTemp))
+                }
+            } else {
+                for temp in record.temperatures { modelContext.delete(temp) }
+                record.temperatures.removeAll()
+            }
+            if let medName = selectedMedName {
+                if let med = record.medications.first {
+                    med.medicationNameRaw = medName
+                } else {
+                    record.medications.append(MedicationUsage(medicationNameRaw: medName))
+                }
+            } else {
+                for med in record.medications { modelContext.delete(med) }
+                record.medications.removeAll()
+            }
         }
 
-        let record = DataRecord(
-            childId: child.id,
-            timestamp: recordTime,
-            notes: notes,
-            temperatures: readings,
-            medications: medications
-        )
-        modelContext.insert(record)
         try? modelContext.save()
         WidgetCenter.shared.reloadAllTimelines()
         dismiss()

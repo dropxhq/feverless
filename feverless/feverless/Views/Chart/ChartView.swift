@@ -354,7 +354,7 @@ struct ChartView: View {
                 Text(importError ?? "未知错误")
             }
             .sheet(item: $editingRecord) { record in
-                EditRecordSheet(record: record)
+                RecordView(mode: .edit(record: record))
             }
             .safeAreaInset(edge: .bottom) {
                 if isSelecting {
