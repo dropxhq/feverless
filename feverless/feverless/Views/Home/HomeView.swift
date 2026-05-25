@@ -5,21 +5,7 @@
 
 import SwiftUI
 import SwiftData
-
-// MARK: - Shared record union type (used by HomeView and ChartView)
-
-// Represents a single displayable item for the recent record list
-enum AnyRecentRecord {
-    case temperature(record: DataRecord, reading: TemperatureReading)
-    case medication(record: DataRecord, usage: MedicationUsage)
-
-    var date: Date {
-        switch self {
-        case .temperature(let r, _): return r.timestamp
-        case .medication(let r, _):  return r.timestamp
-        }
-    }
-}
+import WidgetKit
 
 // MARK: - Pulsing Dot
 
@@ -51,6 +37,12 @@ struct HomeView: View {
     @Binding var selectedChildIdString: String
     @Binding var recordRequest: RecordRequest?
 
+    @State private var editingRecord: DataRecord? = nil
+    @State private var recordPendingDelete: DataRecord? = nil
+    @State private var isSelecting: Bool = false
+    @State private var selectedIds: Set<UUID> = []
+    @State private var showBatchDeleteConfirm: Bool = false
+
     private var childRecords: [DataRecord] {
         guard let child = selectedChild else { return [] }
         return allRecords.filter { $0.childId == child.id }
@@ -60,11 +52,16 @@ struct HomeView: View {
         FeverEpisodeDetector.currentEpisode(for: childRecords)
     }
 
-    private var recentRecords: [AnyRecentRecord] {
-        var items: [AnyRecentRecord] = []
-        for record in childRecords.prefix(10) {
-            items += record.temperatures.map { .temperature(record: record, reading: $0) }
-            items += record.medications.map { .medication(record: record, usage: $0) }
+    private var recentRecords: [RecordDisplayItem] {
+        var items: [RecordDisplayItem] = []
+        for record in childRecords.prefix(20) {
+            if let temp = record.temperatures.first, let med = record.medications.first {
+                items.append(.combined(record: record, reading: temp, usage: med))
+            } else if let temp = record.temperatures.first {
+                items.append(.temperature(record: record, reading: temp))
+            } else if let med = record.medications.first {
+                items.append(.medication(record: record, usage: med))
+            }
         }
         return Array(items.sorted { $0.date > $1.date }.prefix(5))
     }
@@ -110,6 +107,33 @@ struct HomeView: View {
                     childPicker
                 }
             }
+            .safeAreaInset(edge: .bottom) {
+                if isSelecting {
+                    multiSelectBar
+                }
+            }
+        }
+        .sheet(item: $editingRecord) { record in
+            EditRecordSheet(record: record)
+        }
+        .confirmationDialog(
+            recordPendingDelete.map { $0.temperatures.isEmpty || $0.medications.isEmpty ? "" : "将同时删除关联的体温和用药记录" } ?? "",
+            isPresented: Binding(get: { recordPendingDelete != nil }, set: { if !$0 { recordPendingDelete = nil } }),
+            titleVisibility: .visible
+        ) {
+            if let record = recordPendingDelete {
+                Button("删除记录", role: .destructive) {
+                    deleteRecord(record)
+                    recordPendingDelete = nil
+                }
+                Button("取消", role: .cancel) { recordPendingDelete = nil }
+            }
+        }
+        .confirmationDialog("确认批量删除", isPresented: $showBatchDeleteConfirm, titleVisibility: .visible) {
+            Button("删除 \(selectedIds.count) 条记录", role: .destructive) {
+                deleteBatch(from: recentRecords)
+            }
+            Button("取消", role: .cancel) {}
         }
     }
 
@@ -423,87 +447,278 @@ struct HomeView: View {
     private var recentRecordsList: some View {
         if !recentRecords.isEmpty {
             VStack(alignment: .leading, spacing: 0) {
-                Text("最近记录")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 16)
-                    .padding(.top, 14)
-                    .padding(.bottom, 12)
-
-                ForEach(Array(recentRecords.enumerated()), id: \.offset) { index, item in
-                    HStack(spacing: 12) {
-                        switch item {
-                        case .temperature(let record, let reading):
-                            let isFever = reading.isFever()
-                            RoundedRectangle(cornerRadius: 10)
-                                .fill(isFever ? Color.red.opacity(0.08) : Color.green.opacity(0.1))
-                                .frame(width: 34, height: 34)
-                                .overlay(
-                                    Image(systemName: "thermometer.medium")
-                                        .font(.system(size: 14))
-                                        .foregroundStyle(isFever ? Color.red : Color.green)
-                                )
-                            VStack(alignment: .leading, spacing: 2) {
-                                HStack(spacing: 4) {
-                                    Text(String(format: "%.1f°C", reading.value))
-                                        .font(.system(size: 14, weight: .semibold))
-                                        .foregroundStyle(isFever ? Color.red : Color.primary)
-                                    Text("· " + reading.positionRaw)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                                Text(record.timestamp, style: .relative)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                HStack {
+                    Text("最近记录")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    if isSelecting {
+                        let allSelected = selectedIds.count == recentRecords.count
+                        Button(allSelected ? "取消全选" : "全选") {
+                            if allSelected {
+                                selectedIds = []
+                            } else {
+                                selectedIds = Set(recentRecords.map(\.id))
                             }
-                            Spacer()
-                            Text(isFever ? (reading.value >= 39.0 ? "高烧" : "发烧") : "正常")
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(isFever ? Color.red : Color.green)
-                                .padding(.horizontal, 9)
-                                .padding(.vertical, 3)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .fill(isFever ? Color.red.opacity(0.08) : Color.green.opacity(0.1))
-                                )
-
-                        case .medication(let record, let usage):
-                            RoundedRectangle(cornerRadius: 10)
-                                .fill(MedicationCatalog.shared.color(for: usage.medicationNameRaw).opacity(0.12))
-                                .frame(width: 34, height: 34)
-                                .overlay(
-                                    Image(systemName: "pill.fill")
-                                        .font(.system(size: 14))
-                                        .foregroundStyle(MedicationCatalog.shared.color(for: usage.medicationNameRaw))
-                                )
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(usage.medicationNameRaw)
-                                    .font(.system(size: 14, weight: .semibold))
-                                Text(record.timestamp, style: .relative)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Text("用药")
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(Color.blue)
-                                .padding(.horizontal, 9)
-                                .padding(.vertical, 3)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .fill(Color.blue.opacity(0.08))
-                                )
                         }
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.blue)
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 14)
+                .padding(.bottom, 12)
 
-                    if index < recentRecords.count - 1 {
-                        Divider().padding(.leading, 62)
-                    }
+                ForEach(Array(recentRecords.enumerated()), id: \.element.id) { index, item in
+                    recentRecordRow(item, isLast: index == recentRecords.count - 1)
                 }
             }
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
         }
+    }
+
+    @ViewBuilder
+    private func recentRecordRow(_ item: RecordDisplayItem, isLast: Bool) -> some View {
+        let record = item.record
+        let isSelected = selectedIds.contains(record.id)
+
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                if isSelecting {
+                    Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                        .font(.system(size: 20))
+                        .foregroundStyle(isSelected ? Color.blue : Color.secondary)
+                        .animation(.easeInOut(duration: 0.15), value: isSelected)
+                }
+
+                switch item {
+                case .temperature(_, let reading):
+                    tempRowContent(reading: reading, timestamp: record.timestamp, useRelative: true)
+                case .medication(_, let usage):
+                    medRowContent(usage: usage, timestamp: record.timestamp, useRelative: true)
+                case .combined(_, let reading, let usage):
+                    combinedRowContent(reading: reading, usage: usage, timestamp: record.timestamp, useRelative: true)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(isSelected ? Color.blue.opacity(0.06) : Color.clear)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                if isSelecting {
+                    if isSelected { selectedIds.remove(record.id) } else { selectedIds.insert(record.id) }
+                    if selectedIds.isEmpty { isSelecting = false }
+                } else {
+                    editingRecord = record
+                }
+            }
+            .onLongPressGesture {
+                guard !isSelecting else { return }
+                isSelecting = true
+                selectedIds.insert(record.id)
+            }
+            .swipeToDelete(isActive: !isSelecting) {
+                if !record.temperatures.isEmpty && !record.medications.isEmpty {
+                    recordPendingDelete = record
+                } else {
+                    deleteRecord(record)
+                }
+            }
+
+            if !isLast {
+                Divider().padding(.leading, isSelecting ? 68 : 62)
+            }
+        }
+    }
+
+    // MARK: Row Content Builders
+
+    @ViewBuilder
+    private func tempRowContent(reading: TemperatureReading, timestamp: Date, useRelative: Bool) -> some View {
+        let isFever = reading.isFever()
+        RoundedRectangle(cornerRadius: 10)
+            .fill(isFever ? Color.red.opacity(0.08) : Color.green.opacity(0.1))
+            .frame(width: 34, height: 34)
+            .overlay(
+                Image(systemName: "thermometer.medium")
+                    .font(.system(size: 14))
+                    .foregroundStyle(isFever ? Color.red : Color.green)
+            )
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 4) {
+                Text(String(format: "%.1f°C", reading.value))
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(isFever ? Color.red : Color.primary)
+                Text("· " + reading.positionRaw)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            if useRelative {
+                Text(timestamp, style: .relative)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text(timestamp.formatted(date: .abbreviated, time: .shortened))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        Spacer()
+        Text(isFever ? (reading.value >= 39.0 ? "高烧" : "发烧") : "正常")
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(isFever ? Color.red : Color.green)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 3)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(isFever ? Color.red.opacity(0.08) : Color.green.opacity(0.1))
+            )
+    }
+
+    @ViewBuilder
+    private func medRowContent(usage: MedicationUsage, timestamp: Date, useRelative: Bool) -> some View {
+        let color = MedicationCatalog.shared.color(for: usage.medicationNameRaw)
+        RoundedRectangle(cornerRadius: 10)
+            .fill(color.opacity(0.12))
+            .frame(width: 34, height: 34)
+            .overlay(
+                Image(systemName: "pill.fill")
+                    .font(.system(size: 14))
+                    .foregroundStyle(color)
+            )
+        VStack(alignment: .leading, spacing: 2) {
+            Text(usage.medicationNameRaw)
+                .font(.system(size: 14, weight: .semibold))
+            if useRelative {
+                Text(timestamp, style: .relative)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text(timestamp.formatted(date: .abbreviated, time: .shortened))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        Spacer()
+        Text("用药")
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(Color.blue)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 3)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.blue.opacity(0.08))
+            )
+    }
+
+    @ViewBuilder
+    private func combinedRowContent(reading: TemperatureReading, usage: MedicationUsage, timestamp: Date, useRelative: Bool) -> some View {
+        let isFever = reading.isFever()
+        let medColor = MedicationCatalog.shared.color(for: usage.medicationNameRaw)
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 8) {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(isFever ? Color.red.opacity(0.08) : Color.green.opacity(0.1))
+                    .frame(width: 28, height: 28)
+                    .overlay(
+                        Image(systemName: "thermometer.medium")
+                            .font(.system(size: 12))
+                            .foregroundStyle(isFever ? Color.red : Color.green)
+                    )
+                Text(String(format: "%.1f°C", reading.value))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(isFever ? Color.red : Color.primary)
+                Text("· " + reading.positionRaw)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text(isFever ? (reading.value >= 39.0 ? "高烧" : "发烧") : "正常")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(isFever ? Color.red : Color.green)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 3)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(isFever ? Color.red.opacity(0.08) : Color.green.opacity(0.1)))
+            }
+            HStack(spacing: 8) {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(medColor.opacity(0.12))
+                    .frame(width: 28, height: 28)
+                    .overlay(
+                        Image(systemName: "pill.fill")
+                            .font(.system(size: 12))
+                            .foregroundStyle(medColor)
+                    )
+                Text(usage.medicationNameRaw)
+                    .font(.system(size: 13, weight: .medium))
+            }
+            if useRelative {
+                Text(timestamp, style: .relative)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.leading, 36)
+            } else {
+                Text(timestamp.formatted(date: .abbreviated, time: .shortened))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.leading, 36)
+            }
+        }
+    }
+
+    // MARK: Multi-select Bar
+
+    @ViewBuilder
+    private var multiSelectBar: some View {
+        VStack(spacing: 0) {
+            Divider()
+            HStack(spacing: 0) {
+                Button {
+                    isSelecting = false
+                    selectedIds = []
+                } label: {
+                    Text("取消")
+                        .foregroundStyle(.blue)
+                        .frame(maxWidth: .infinity)
+                }
+
+                Divider().frame(height: 20)
+
+                Text(selectedIds.isEmpty ? "未选中" : "已选 \(selectedIds.count) 条")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity)
+
+                Divider().frame(height: 20)
+
+                Button {
+                    showBatchDeleteConfirm = true
+                } label: {
+                    Text("删除")
+                        .foregroundStyle(selectedIds.isEmpty ? Color.gray : Color.red)
+                        .frame(maxWidth: .infinity)
+                }
+                .disabled(selectedIds.isEmpty)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(.bar)
+        }
+    }
+
+    // MARK: Actions
+
+    private func deleteRecord(_ record: DataRecord) {
+        modelContext.delete(record)
+        try? modelContext.save()
+        WidgetCenter.shared.reloadAllTimelines()
+    }
+
+    private func deleteBatch(from items: [RecordDisplayItem]) {
+        let toDelete = items.filter { selectedIds.contains($0.id) }.map(\.record)
+        for record in toDelete { modelContext.delete(record) }
+        try? modelContext.save()
+        WidgetCenter.shared.reloadAllTimelines()
+        selectedIds = []
+        isSelecting = false
     }
 }

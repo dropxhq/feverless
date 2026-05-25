@@ -1,29 +1,4 @@
-## ADDED Requirements
-
-### Requirement: 体温趋势折线图
-图表页 SHALL 使用 Swift Charts 渲染当前发烧周期内的体温折线图，X 轴为时间，Y 轴为温度（范围自动适配，含正常体温参考线 37.0°C）。
-
-#### Scenario: 展示折线图
-- **WHEN** 存在当前发烧周期的体温记录
-- **THEN** 折线图展示各记录点，Y 轴包含 36–40°C 范围
-
-#### Scenario: 无数据时
-- **WHEN** 无任何体温记录
-- **THEN** 展示空状态占位图
-
-### Requirement: 用药标记
-图表页 SHALL 在折线图上用 `RuleMark`（竖线）标注每次用药时间，布洛芬用黄色、对乙酰氨基酚用蓝色。
-
-#### Scenario: 用药时间标注
-- **WHEN** 存在用药记录
-- **THEN** 对应时间点出现带颜色的竖线标注
-
-### Requirement: 时间范围筛选
-图表页 SHALL 提供"今天 / 昨天 / 7天"三档时间范围筛选，默认"今天"。
-
-#### Scenario: 切换时间范围
-- **WHEN** 用户点击"7天"
-- **THEN** 图表 X 轴扩展为最近 7 天，展示全部记录
+## MODIFIED Requirements
 
 ### Requirement: 记录明细列表
 图表页 SHALL 在图表下方展示当前时间范围内所有 DataRecord，每条 DataRecord 显示为一行（同时含体温和用药者合并为单行），按时间倒序排列。列表支持 swipe 删除、点击编辑（弹出编辑 Sheet）、长按进入多选批量删除、按日期分组全选、全选当前时间范围内可见记录。切换时间范围时退出多选模式并清空选中状态。
