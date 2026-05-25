@@ -359,10 +359,15 @@ struct HomeView: View {
             }.max()
 
         HStack(spacing: 12) {
+            let iconColor = catalog.color(for: definition.canonicalName)
             RoundedRectangle(cornerRadius: 10)
-                .fill(catalog.iconBackground(for: definition.canonicalName))
+                .fill(iconColor.opacity(0.12))
                 .frame(width: 36, height: 36)
-                .overlay(Text(catalog.emoji(for: definition.canonicalName)).font(.body))
+                .overlay(
+                    Image(systemName: "pill.fill")
+                        .font(.system(size: 14))
+                        .foregroundStyle(iconColor)
+                )
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(definition.canonicalName)
