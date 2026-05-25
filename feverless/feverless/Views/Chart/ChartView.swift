@@ -367,7 +367,7 @@ struct ChartView: View {
             }
         }
         .confirmationDialog(
-            recordPendingDelete.map { $0.temperatures.isEmpty || $0.medications.isEmpty ? "" : "将同时删除关联的体温和用药记录" } ?? "",
+            "确认删除此记录？",
             isPresented: Binding(get: { recordPendingDelete != nil }, set: { if !$0 { recordPendingDelete = nil } }),
             titleVisibility: .visible
         ) {
@@ -377,6 +377,11 @@ struct ChartView: View {
                     recordPendingDelete = nil
                 }
                 Button("取消", role: .cancel) { recordPendingDelete = nil }
+            }
+        } message: {
+            if let record = recordPendingDelete,
+               !record.temperatures.isEmpty && !record.medications.isEmpty {
+                Text("将同时删除关联的体温和用药记录")
             }
         }
         .confirmationDialog("确认批量删除", isPresented: $showBatchDeleteConfirm, titleVisibility: .visible) {
@@ -864,11 +869,7 @@ struct ChartView: View {
                 selectedIds.insert(record.id)
             }
             .swipeToDelete(isActive: !isSelecting) {
-                if !record.temperatures.isEmpty && !record.medications.isEmpty {
-                    recordPendingDelete = record
-                } else {
-                    deleteRecord(record)
-                }
+                recordPendingDelete = record
             }
 
             if !isLast {
@@ -931,17 +932,17 @@ struct ChartView: View {
     private func chartCombinedRowContent(reading: TemperatureReading, usage: MedicationUsage, timestamp: Date) -> some View {
         let isFever = reading.isFever()
         VStack(alignment: .leading, spacing: 5) {
-            HStack(spacing: 8) {
-                RoundedRectangle(cornerRadius: 8)
+            HStack(spacing: 12) {
+                RoundedRectangle(cornerRadius: 10)
                     .fill(isFever ? Color.red.opacity(0.08) : Color.green.opacity(0.1))
-                    .frame(width: 28, height: 28)
+                    .frame(width: 34, height: 34)
                     .overlay(
                         Image(systemName: "thermometer.medium")
-                            .font(.system(size: 12))
+                            .font(.system(size: 14))
                             .foregroundStyle(isFever ? Color.red : Color.green)
                     )
                 Text(String(format: "%.1f°C", reading.value))
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(isFever ? Color.red : Color.primary)
                 Text("· " + reading.positionRaw)
                     .font(.caption)
@@ -951,20 +952,20 @@ struct ChartView: View {
                     Text(reading.value >= 39.0 ? "高烧" : "发烧")
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(Color.red)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 2)
-                        .background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 3)
+                        .background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
                 }
             }
-            HStack(spacing: 8) {
-                MedicationCatalog.shared.iconView(for: usage.medicationNameRaw, size: 28)
+            HStack(spacing: 12) {
+                MedicationCatalog.shared.iconView(for: usage.medicationNameRaw, size: 34)
                 Text(usage.medicationNameRaw)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.system(size: 14, weight: .medium))
             }
             Text(timestamp.formatted(date: .abbreviated, time: .shortened))
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                .padding(.leading, 36)
+                .padding(.leading, 46)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
