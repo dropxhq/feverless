@@ -2,10 +2,14 @@ import SwiftUI
 
 // MARK: - SwipeToDeleteModifier
 // Custom swipe-to-delete for use outside of List (e.g. inside ScrollView/VStack).
-// Each row gets its own drag offset via @State inside the modifier.
+// Two-stage confirmation: first tap shows "确认", second tap deletes.
+// Right swipe, tap on row content, or entering multi-select all reset the row.
 
 struct SwipeToDeleteModifier: ViewModifier {
     @State private var offset: CGFloat = 0
+    @State private var isConfirming: Bool = false
+    @State private var isDragging: Bool = false
+    @State private var dragBaseOffset: CGFloat = 0
     let isActive: Bool       // set false in multi-select mode
     let deleteButtonWidth: CGFloat
     let onDelete: () -> Void
@@ -16,30 +20,47 @@ struct SwipeToDeleteModifier: ViewModifier {
         self.onDelete = onDelete
     }
 
+    private var isOpen: Bool { offset < -8 }
+
     func body(content: Content) -> some View {
         ZStack(alignment: .trailing) {
-            // Red delete region behind content
+            // Layer 1 (bottom): full-width tap-to-close background, only when open
+            if isOpen {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture { closeRow() }
+            }
+
+            // Layer 2: red delete / confirm button (trailing)
             if offset < 0 {
-                Color.red
+                (isConfirming ? Color(red: 0.75, green: 0.1, blue: 0.1) : Color.red)
                     .frame(width: min(-offset, deleteButtonWidth))
                     .overlay(
                         VStack(spacing: 2) {
-                            Image(systemName: "trash")
+                            Image(systemName: isConfirming ? "checkmark" : "trash")
                                 .font(.system(size: 15))
-                            Text("删除")
+                            Text(isConfirming ? "确认" : "删除")
                                 .font(.system(size: 10, weight: .medium))
                         }
                         .foregroundStyle(.white)
                         .opacity(-offset > 24 ? 1 : 0)
                     )
                     .onTapGesture {
-                        onDelete()
-                        withAnimation(.spring(duration: 0.25)) { offset = 0 }
+                        if isConfirming {
+                            onDelete()
+                            closeRow()
+                        } else {
+                            withAnimation(.spring(duration: 0.2)) {
+                                isConfirming = true
+                            }
+                        }
                     }
             }
 
+            // Layer 3 (top): content — passes through taps when open so layers below can respond
             content
                 .offset(x: offset)
+                .allowsHitTesting(!isOpen)
         }
         .clipped()
         .simultaneousGesture(
@@ -48,25 +69,37 @@ struct SwipeToDeleteModifier: ViewModifier {
                     guard isActive else { return }
                     let dx = value.translation.width
                     let dy = value.translation.height
-                    // Only activate for predominantly horizontal (< ~54° from horizontal)
-                    guard abs(dx) > abs(dy) * 0.7, dx < 0 else { return }
+                    guard abs(dx) > abs(dy) * 0.7 else { return }
+                    if !isDragging {
+                        isDragging = true
+                        dragBaseOffset = offset
+                        // Any new drag resets confirming state
+                        isConfirming = false
+                    }
+                    let newOffset = dragBaseOffset + dx
                     withAnimation(.interactiveSpring()) {
-                        offset = max(dx, -deleteButtonWidth)
+                        offset = min(0, max(newOffset, -deleteButtonWidth))
                     }
                 }
                 .onEnded { _ in
                     guard isActive else { return }
-                    if offset <= -(deleteButtonWidth * 0.5) {
-                        // Commit delete on release past half-way
-                        onDelete()
+                    isDragging = false
+                    if offset > -(deleteButtonWidth * 0.5) {
+                        closeRow()
+                    } else {
+                        withAnimation(.spring(duration: 0.25)) { offset = -deleteButtonWidth }
                     }
-                    withAnimation(.spring(duration: 0.25)) { offset = 0 }
                 }
         )
         .onChange(of: isActive) { _, newValue in
-            if !newValue {
-                withAnimation(.spring(duration: 0.2)) { offset = 0 }
-            }
+            if !newValue { closeRow() }
+        }
+    }
+
+    private func closeRow() {
+        withAnimation(.spring(duration: 0.25)) {
+            offset = 0
+            isConfirming = false
         }
     }
 }

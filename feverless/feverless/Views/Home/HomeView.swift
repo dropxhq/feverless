@@ -38,7 +38,6 @@ struct HomeView: View {
     @Binding var recordRequest: RecordRequest?
 
     @State private var editingRecord: DataRecord? = nil
-    @State private var recordPendingDelete: DataRecord? = nil
     @State private var isSelecting: Bool = false
     @State private var selectedIds: Set<UUID> = []
     @State private var showBatchDeleteConfirm: Bool = false
@@ -135,24 +134,6 @@ struct HomeView: View {
         }
         .sheet(item: $editingRecord) { record in
             RecordView(mode: .edit(record: record))
-        }
-        .confirmationDialog(
-            "确认删除此记录？",
-            isPresented: Binding(get: { recordPendingDelete != nil }, set: { if !$0 { recordPendingDelete = nil } }),
-            titleVisibility: .visible
-        ) {
-            if let record = recordPendingDelete {
-                Button("删除记录", role: .destructive) {
-                    deleteRecord(record)
-                    recordPendingDelete = nil
-                }
-                Button("取消", role: .cancel) { recordPendingDelete = nil }
-            }
-        } message: {
-            if let record = recordPendingDelete,
-               !record.temperatures.isEmpty && !record.medications.isEmpty {
-                Text("将同时删除关联的体温和用药记录")
-            }
         }
         .confirmationDialog("确认批量删除", isPresented: $showBatchDeleteConfirm, titleVisibility: .visible) {
             Button("删除 \(selectedIds.count) 条记录", role: .destructive) {
@@ -536,7 +517,7 @@ struct HomeView: View {
                 selectedIds.insert(record.id)
             }
             .swipeToDelete(isActive: !isSelecting) {
-                recordPendingDelete = record
+                deleteRecord(record)
             }
 
             if !isLast {
